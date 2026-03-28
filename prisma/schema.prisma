@@ -1,0 +1,356 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_DATABASE_URL")
+}
+
+enum ReleaseStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum FeedbackSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum MembershipSource {
+  INVITE_LINK
+  BUILDER_ADDED
+}
+
+enum RecognitionSource {
+  NONE
+  USER_AGENT
+  WALLET_CONTEXT
+  VERIFIED_WALLET_SGT
+}
+
+enum DeviceClass {
+  MOBILE
+  TABLET
+  DESKTOP
+  UNKNOWN
+}
+
+enum StorageObjectKind {
+  RELEASE_APK
+}
+
+model User {
+  id                            String                 @id @default(cuid())
+  name                          String
+  email                         String                 @unique
+  emailVerified                 Boolean                @default(false)
+  image                         String?
+  isAnonymous                   Boolean                @default(false)
+  createdAt                     DateTime               @default(now())
+  updatedAt                     DateTime               @updatedAt
+  sessions                      Session[]
+  accounts                      Account[]
+  ownedProjects                 AppProject[]
+  createdReleases               Release[]              @relation("ReleaseAuthor")
+  createdInvites                InviteLink[]           @relation("InviteCreator")
+  testerMemberships             TesterMembership[]
+  inviteClaims                  InviteClaim[]
+  feedbackReports               FeedbackReport[]
+  downloadEvents                DownloadEvent[]
+  releaseViewEvents             ReleaseViewEvent[]
+  deviceProfiles                DeviceProfile[]
+  wallets                       Wallet[]
+  uploadSessions                ReleaseUploadSession[]
+  walletChallenges              WalletChallenge[]
+}
+
+model Session {
+  id                            String                 @id @default(cuid())
+  expiresAt                     DateTime
+  token                         String                 @unique
+  createdAt                     DateTime               @default(now())
+  updatedAt                     DateTime               @updatedAt
+  ipAddress                     String?
+  userAgent                     String?
+  userId                        String
+  impersonatedBy                String?
+  user                          User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Account {
+  id                            String                 @id @default(cuid())
+  accountId                     String
+  providerId                    String
+  userId                        String
+  accessToken                   String?
+  refreshToken                  String?
+  accessTokenExpiresAt          DateTime?
+  refreshTokenExpiresAt         DateTime?
+  scope                         String?
+  idToken                       String?
+  password                      String?
+  createdAt                     DateTime               @default(now())
+  updatedAt                     DateTime               @updatedAt
+  user                          User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([providerId, accountId])
+}
+
+model Verification {
+  id                            String                 @id @default(cuid())
+  identifier                    String
+  value                         String
+  expiresAt                     DateTime
+  createdAt                     DateTime               @default(now())
+  updatedAt                     DateTime               @updatedAt
+
+  @@unique([identifier, value])
+}
+
+model AppProject {
+  id                            String                 @id @default(cuid())
+  ownerId                       String
+  slug                          String                 @unique
+  name                          String
+  description                   String?
+  createdAt                     DateTime               @default(now())
+  updatedAt                     DateTime               @updatedAt
+  owner                         User                   @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  releases                      Release[]
+  testerGroups                  TesterGroup[]
+  inviteLinks                   InviteLink[]
+  testerMemberships             TesterMembership[]
+  uploadSessions                ReleaseUploadSession[]
+}
+
+model Release {
+  id                            String                 @id @default(cuid())
+  projectId                     String
+  createdById                   String
+  status                        ReleaseStatus          @default(PUBLISHED)
+  versionName                   String
+  versionCode                   Int
+  changelog                     String
+  publishedAt                   DateTime               @default(now())
+  createdAt                     DateTime               @default(now())
+  updatedAt                     DateTime               @updatedAt
+  project                       AppProject             @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdBy                     User                   @relation("ReleaseAuthor", fields: [createdById], references: [id], onDelete: Cascade)
+  buildAsset                    BuildAsset?
+  accessPolicy                  AccessPolicy?
+  inviteLinks                   InviteLink[]
+  downloadEvents                DownloadEvent[]
+  releaseViewEvents             ReleaseViewEvent[]
+  feedbackReports               FeedbackReport[]
+
+  @@unique([projectId, versionCode])
+}
+
+model BuildAsset {
+  id                            String                 @id @default(cuid())
+  releaseId                     String                 @unique
+  kind                          StorageObjectKind      @default(RELEASE_APK)
+  storageKey                    String                 @unique
+  bucket                        String
+  originalFileName              String
+  contentType                   String
+  fileSizeBytes                 BigInt
+  sha256Checksum                String
+  uploadedAt                    DateTime               @default(now())
+  validatedAt                   DateTime?
+  release                       Release                @relation(fields: [releaseId], references: [id], onDelete: Cascade)
+}
+
+model InviteLink {
+  id                            String                 @id @default(cuid())
+  projectId                     String
+  releaseId                     String?
+  testerGroupId                 String?
+  createdById                   String
+  label                         String
+  tokenHash                     String                 @unique
+  tokenCiphertext               String?
+  maxUses                       Int?
+  expiresAt                     DateTime?
+  revokedAt                     DateTime?
+  createdAt                     DateTime               @default(now())
+  updatedAt                     DateTime               @updatedAt
+  project                       AppProject             @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  release                       Release?               @relation(fields: [releaseId], references: [id], onDelete: Cascade)
+  testerGroup                   TesterGroup?           @relation(fields: [testerGroupId], references: [id], onDelete: SetNull)
+  createdBy                     User                   @relation("InviteCreator", fields: [createdById], references: [id], onDelete: Cascade)
+  inviteClaims                  InviteClaim[]
+}
+
+model InviteClaim {
+  id                            String                 @id @default(cuid())
+  inviteLinkId                  String
+  userId                        String
+  createdAt                     DateTime               @default(now())
+  inviteLink                    InviteLink             @relation(fields: [inviteLinkId], references: [id], onDelete: Cascade)
+  user                          User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([inviteLinkId, userId])
+}
+
+model TesterGroup {
+  id                            String                 @id @default(cuid())
+  projectId                     String
+  name                          String
+  description                   String?
+  createdAt                     DateTime               @default(now())
+  updatedAt                     DateTime               @updatedAt
+  project                       AppProject             @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  memberships                   TesterMembership[]
+  inviteLinks                   InviteLink[]
+  accessPolicies                AccessPolicy[]
+
+  @@unique([projectId, name])
+}
+
+model TesterMembership {
+  id                            String                 @id @default(cuid())
+  projectId                     String
+  testerGroupId                 String?
+  userId                        String
+  source                        MembershipSource       @default(INVITE_LINK)
+  inviteLinkId                  String?
+  createdAt                     DateTime               @default(now())
+  project                       AppProject             @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  testerGroup                   TesterGroup?           @relation(fields: [testerGroupId], references: [id], onDelete: SetNull)
+  user                          User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, testerGroupId, userId])
+}
+
+model AccessPolicy {
+  id                            String                 @id @default(cuid())
+  releaseId                     String                 @unique
+  requireInviteAcceptance       Boolean                @default(true)
+  testerGroupId                 String?
+  requireLinkedWallet           Boolean                @default(false)
+  requireSolanaMobile           Boolean                @default(false)
+  requireVerifiedSeeker         Boolean                @default(false)
+  allowPreviousReleases         Boolean                @default(false)
+  createdAt                     DateTime               @default(now())
+  updatedAt                     DateTime               @updatedAt
+  release                       Release                @relation(fields: [releaseId], references: [id], onDelete: Cascade)
+  testerGroup                   TesterGroup?           @relation(fields: [testerGroupId], references: [id], onDelete: SetNull)
+  walletEntries                 AccessPolicyWalletEntry[]
+}
+
+model AccessPolicyWalletEntry {
+  id                            String                 @id @default(cuid())
+  accessPolicyId                String
+  address                       String
+  label                         String?
+  createdAt                     DateTime               @default(now())
+  accessPolicy                  AccessPolicy           @relation(fields: [accessPolicyId], references: [id], onDelete: Cascade)
+
+  @@unique([accessPolicyId, address])
+}
+
+model Wallet {
+  id                            String                 @id @default(cuid())
+  userId                        String
+  address                       String                 @unique
+  label                         String?
+  isPrimary                     Boolean                @default(false)
+  verifiedAt                    DateTime
+  seekerGenesisVerifiedAt       DateTime?
+  seekerGenesisMintAddress      String?
+  createdAt                     DateTime               @default(now())
+  updatedAt                     DateTime               @updatedAt
+  user                          User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model DeviceProfile {
+  id                            String                 @id @default(cuid())
+  userId                        String
+  browserName                   String?
+  browserVersion                String?
+  osName                        String?
+  osVersion                     String?
+  deviceClass                   DeviceClass            @default(UNKNOWN)
+  platformLabel                 String?
+  isSeeker                      Boolean                @default(false)
+  isSolanaMobileCapable         Boolean                @default(false)
+  hasMobileWalletAdapterContext Boolean                @default(false)
+  recognitionSource             RecognitionSource      @default(NONE)
+  capturedAt                    DateTime               @default(now())
+  user                          User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  feedbackReports               FeedbackReport[]
+  downloadEvents                DownloadEvent[]
+  releaseViewEvents             ReleaseViewEvent[]
+}
+
+model DownloadEvent {
+  id                            String                 @id @default(cuid())
+  releaseId                     String
+  userId                        String?
+  deviceProfileId               String?
+  createdAt                     DateTime               @default(now())
+  release                       Release                @relation(fields: [releaseId], references: [id], onDelete: Cascade)
+  user                          User?                  @relation(fields: [userId], references: [id], onDelete: SetNull)
+  deviceProfile                 DeviceProfile?         @relation(fields: [deviceProfileId], references: [id], onDelete: SetNull)
+}
+
+model ReleaseViewEvent {
+  id                            String                 @id @default(cuid())
+  releaseId                     String
+  userId                        String?
+  deviceProfileId               String?
+  createdAt                     DateTime               @default(now())
+  release                       Release                @relation(fields: [releaseId], references: [id], onDelete: Cascade)
+  user                          User?                  @relation(fields: [userId], references: [id], onDelete: SetNull)
+  deviceProfile                 DeviceProfile?         @relation(fields: [deviceProfileId], references: [id], onDelete: SetNull)
+}
+
+model FeedbackReport {
+  id                            String                 @id @default(cuid())
+  releaseId                     String
+  userId                        String
+  deviceProfileId               String?
+  title                         String
+  description                   String
+  severity                      FeedbackSeverity
+  deviceContextJson             Json?
+  createdAt                     DateTime               @default(now())
+  updatedAt                     DateTime               @updatedAt
+  release                       Release                @relation(fields: [releaseId], references: [id], onDelete: Cascade)
+  user                          User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deviceProfile                 DeviceProfile?         @relation(fields: [deviceProfileId], references: [id], onDelete: SetNull)
+}
+
+model ReleaseUploadSession {
+  id                            String                 @id @default(cuid())
+  projectId                     String
+  userId                        String
+  storageKey                    String                 @unique
+  originalFileName              String
+  contentType                   String
+  expectedSize                  BigInt?
+  draftJson                     Json
+  expiresAt                     DateTime
+  completedAt                   DateTime?
+  createdAt                     DateTime               @default(now())
+  project                       AppProject             @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user                          User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model WalletChallenge {
+  id                            String                 @id @default(cuid())
+  userId                        String
+  address                       String
+  nonce                         String
+  message                       String
+  expiresAt                     DateTime
+  usedAt                        DateTime?
+  createdAt                     DateTime               @default(now())
+  user                          User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+}

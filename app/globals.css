@@ -1,0 +1,127 @@
+@import "tailwindcss";
+
+:root {
+  --background: #f2f6fb;
+  --foreground: #142033;
+  --surface: rgba(255, 255, 255, 0.78);
+  --panel: #f8fbff;
+  --card: #ffffff;
+  --card-foreground: #142033;
+  --muted: #eef3f8;
+  --muted-foreground: #66758f;
+  --border: rgba(20, 32, 51, 0.09);
+  --input: rgba(20, 32, 51, 0.08);
+  --primary: #0f172a;
+  --primary-foreground: #f8fafc;
+  --secondary: #e9eef6;
+  --secondary-foreground: #142033;
+  --accent: #dff4ea;
+  --accent-foreground: #0f5531;
+  --danger: #e74b4b;
+  --danger-foreground: #fff5f5;
+  --brand: #3f74ff;
+  --brand-soft: #edf3ff;
+  --success: #0f9f68;
+  --ring: rgba(63, 116, 255, 0.24);
+  --radius: 1rem;
+}
+
+:root[data-theme="dark"] {
+  --background: #09111f;
+  --foreground: #edf3ff;
+  --surface: rgba(15, 23, 42, 0.78);
+  --panel: #0f172a;
+  --card: #111c31;
+  --card-foreground: #edf3ff;
+  --muted: #13213a;
+  --muted-foreground: #9ba9c2;
+  --border: rgba(226, 232, 240, 0.1);
+  --input: rgba(226, 232, 240, 0.08);
+  --primary: #edf3ff;
+  --primary-foreground: #09111f;
+  --secondary: #14223b;
+  --secondary-foreground: #edf3ff;
+  --accent: #163127;
+  --accent-foreground: #b7f0d2;
+  --danger: #ff6b6b;
+  --danger-foreground: #170909;
+  --brand: #7aa4ff;
+  --brand-soft: rgba(122, 164, 255, 0.14);
+  --success: #3ed598;
+  --ring: rgba(122, 164, 255, 0.3);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-surface: var(--surface);
+  --color-panel: var(--panel);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-danger: var(--danger);
+  --color-danger-foreground: var(--danger-foreground);
+  --color-brand: var(--brand);
+  --color-brand-soft: var(--brand-soft);
+  --color-success: var(--success);
+  --color-ring: var(--ring);
+  --font-sans: var(--font-manrope);
+  --font-mono: var(--font-plex-mono);
+  --radius-sm: calc(var(--radius) - 0.5rem);
+  --radius-md: calc(var(--radius) - 0.25rem);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 0.5rem);
+}
+
+@layer base {
+  * {
+    border-color: var(--border);
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    background: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-manrope), sans-serif;
+    text-rendering: optimizeLegibility;
+    transition:
+      background-color 180ms ease,
+      color 180ms ease;
+  }
+
+  ::selection {
+    background: rgba(63, 116, 255, 0.18);
+  }
+}
+
+@layer components {
+  .page-shell {
+    @apply mx-auto flex w-full max-w-7xl flex-col gap-6 px-5 py-6 sm:px-8;
+  }
+
+  .section-eyebrow {
+    @apply font-mono text-xs uppercase tracking-[0.24em] text-muted-foreground;
+  }
+
+  .glass-panel {
+    @apply rounded-[1.75rem] border border-border bg-surface shadow-[0_24px_64px_rgba(15,23,42,0.06)] backdrop-blur;
+  }
+
+  .grid-noise {
+    background-image: linear-gradient(rgba(20, 32, 51, 0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(20, 32, 51, 0.03) 1px, transparent 1px);
+    background-size: 24px 24px;
+  }
+}

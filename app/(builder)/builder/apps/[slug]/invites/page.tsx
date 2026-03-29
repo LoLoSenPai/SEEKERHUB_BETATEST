@@ -34,7 +34,10 @@ export default async function InvitesPage({
   const inviteLinks = project.inviteLinks.map((invite) => {
     let shareUrl: string | null = null;
     const acceptedClaims = invite.inviteClaims.length;
-    const hasReachedMaxUses = invite.maxUses ? acceptedClaims >= invite.maxUses : false;
+    const grantedSeats = invite.maxUses
+      ? invite.inviteClaims.filter((claim) => Boolean(claim.grantedAt)).length
+      : acceptedClaims;
+    const hasReachedMaxUses = invite.maxUses ? grantedSeats >= invite.maxUses : false;
     const isExpired = Boolean(invite.expiresAt && invite.expiresAt < new Date());
     const isRevoked = Boolean(invite.revokedAt);
     const status = isRevoked ? "revoked" : hasReachedMaxUses ? "consumed" : isExpired ? "expired" : "active";
@@ -50,6 +53,7 @@ export default async function InvitesPage({
     return {
       ...invite,
       acceptedClaims,
+      grantedSeats,
       hasReachedMaxUses,
       isExpired,
       isRevoked,
@@ -169,7 +173,8 @@ export default async function InvitesPage({
                     )}
                   </div>
                   <div className="mt-3 grid gap-2 text-sm text-muted-foreground">
-                    <div>{invite.acceptedClaims} accepted claims</div>
+                    <div>{invite.acceptedClaims} raw claims</div>
+                    <div>{invite.grantedSeats} granted seats</div>
                     <div>Max uses: {invite.maxUses ?? "Unlimited"}</div>
                     <div>Expires: {invite.expiresAt ? format(invite.expiresAt, "PPP p") : "Never"}</div>
                     {invite.revokedAt ? <div>Revoked: {format(invite.revokedAt, "PPP p")}</div> : null}

@@ -32,10 +32,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
       return NextResponse.json({ error: "Invite expired." }, { status: 410 });
     }
 
-    if (invite.maxUses && invite.inviteClaims.length >= invite.maxUses) {
-      return NextResponse.json({ error: "Invite reached its maximum number of claims." }, { status: 409 });
-    }
-
     await prisma.$transaction(async (tx) => {
       const existingClaim = await tx.inviteClaim.findFirst({
         where: {

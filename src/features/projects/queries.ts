@@ -1,5 +1,6 @@
 import { prisma } from "@/src/lib/db";
 import { hashInviteToken } from "@/src/lib/invite";
+import { resolveInviteAcceptanceForRelease } from "@/src/lib/invite-access";
 import { evaluateReleaseAccess } from "@/src/lib/access";
 
 export async function getBuilderDashboard(userId: string) {
@@ -194,21 +195,43 @@ export async function getAccessibleReleasesForUser(userId: string) {
 
   if (!user) return [];
 
-  return releases.filter((release) => {
-    if (!release.accessPolicy) return false;
+  const accessibleReleases: typeof releases = [];
+  let resolvedInviteClaims = user.inviteClaims;
 
-    const decision = evaluateReleaseAccess({
+  for (const release of releases) {
+    if (!release.accessPolicy) {
+      continue;
+    }
+
+    const inviteResolution = await resolveInviteAcceptanceForRelease({
+      userId,
       policy: release.accessPolicy,
       testerMemberships: user.testerMemberships,
-      inviteClaims: user.inviteClaims,
+      inviteClaims: resolvedInviteClaims,
       wallets: user.wallets,
       deviceProfile: user.deviceProfiles[0] ?? null,
       releaseId: release.id,
       projectId: release.projectId,
     });
 
-    return decision.canView;
-  });
+    resolvedInviteClaims = inviteResolution.inviteClaims;
+
+    const decision = evaluateReleaseAccess({
+      policy: release.accessPolicy,
+      testerMemberships: user.testerMemberships,
+      inviteClaims: resolvedInviteClaims,
+      wallets: user.wallets,
+      deviceProfile: user.deviceProfiles[0] ?? null,
+      releaseId: release.id,
+      projectId: release.projectId,
+    });
+
+    if (decision.canView) {
+      accessibleReleases.push(release);
+    }
+  }
+
+  return accessibleReleases;
 }
 
 export async function getTesterIdentity(userId: string) {
@@ -262,7 +285,8 @@ export async function getTesterRelease(releaseId: string, userId: string) {
     return null;
   }
 
-  const decision = evaluateReleaseAccess({
+  const inviteResolution = await resolveInviteAcceptanceForRelease({
+    userId,
     policy: release.accessPolicy,
     testerMemberships: user.testerMemberships,
     inviteClaims: user.inviteClaims,
@@ -271,6 +295,26 @@ export async function getTesterRelease(releaseId: string, userId: string) {
     releaseId: release.id,
     projectId: release.projectId,
   });
+
+  const decision = evaluateReleaseAccess({
+    policy: release.accessPolicy,
+    testerMemberships: user.testerMemberships,
+    inviteClaims: inviteResolution.inviteClaims,
+    wallets: user.wallets,
+    deviceProfile: user.deviceProfiles[0] ?? null,
+    releaseId: release.id,
+    projectId: release.projectId,
+  });
+
+  if (
+    inviteResolution.inviteCapacityReason &&
+    decision.reasons.includes("An accepted invite is required for this release.")
+  ) {
+    const capacityReason = inviteResolution.inviteCapacityReason;
+    decision.reasons = decision.reasons.map((reason) =>
+      reason === "An accepted invite is required for this release." ? capacityReason : reason,
+    );
+  }
 
   return {
     release,

@@ -6,9 +6,11 @@ type EvaluateReleaseAccessInput = {
   };
   testerMemberships: TesterMembership[];
   inviteClaims: Array<{
+    grantedAt?: Date | null;
     inviteLink: {
       projectId: string;
       releaseId: string | null;
+      maxUses?: number | null;
     };
   }>;
   wallets: Wallet[];
@@ -33,8 +35,9 @@ export function evaluateReleaseAccess(input: EvaluateReleaseAccessInput): Access
     : inviteClaims.some(
         (claim) =>
           claim.inviteLink.projectId === projectId &&
-          (claim.inviteLink.releaseId === null || claim.inviteLink.releaseId === releaseId),
-      ) || testerMemberships.some((membership) => membership.projectId === projectId);
+          (claim.inviteLink.releaseId === null || claim.inviteLink.releaseId === releaseId) &&
+          (!claim.inviteLink.maxUses || Boolean(claim.grantedAt)),
+      );
 
   if (!hasInviteClaim && policy.requireInviteAcceptance) {
     reasons.push("An accepted invite is required for this release.");

@@ -27,8 +27,20 @@ export function ReleaseUploadForm({
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [accessMode, setAccessMode] = useState("invite");
   const [walletAllowlist, setWalletAllowlist] = useState("");
   const groupChoices = useMemo(() => groups, [groups]);
+  const accessSummary = useMemo(() => {
+    if (accessMode === "group") {
+      return "Tester group restricted means the tester must first claim an invite that adds them to the selected group, then the release checks that group membership.";
+    }
+
+    if (accessMode === "wallet-only") {
+      return "Wallet allowlist skips invite acceptance. If the allowlist is empty, any linked wallet can open the release unless you also require verified Seeker.";
+    }
+
+    return "Private by invite means an accepted invite is the main gate. Wallet and Seeker requirements below are additional filters on top.";
+  }, [accessMode]);
 
   return (
     <Card className="rounded-[2rem]">
@@ -57,15 +69,24 @@ export function ReleaseUploadForm({
               return;
             }
 
+            const selectedAccessMode = String(formData.get("accessMode") ?? "invite");
+            const selectedTesterGroupId = String(formData.get("testerGroupId") ?? "").trim();
+
+            if (selectedAccessMode === "group" && !selectedTesterGroupId) {
+              setError("Select a tester group for the group-restricted preset.");
+              setLoading(false);
+              return;
+            }
+
             const draft = {
               projectId,
               versionName: String(formData.get("versionName") ?? ""),
               versionCode: Number(formData.get("versionCode") ?? 0),
               changelog: String(formData.get("changelog") ?? ""),
               accessPolicy: {
-                requireInviteAcceptance: formData.get("accessMode") !== "wallet-only",
-                testerGroupId: String(formData.get("testerGroupId") ?? "") || null,
-                requireLinkedWallet: formData.get("accessMode") === "wallet-only" || formData.get("walletRequired") === "on",
+                requireInviteAcceptance: selectedAccessMode !== "wallet-only",
+                testerGroupId: selectedTesterGroupId || null,
+                requireLinkedWallet: selectedAccessMode === "wallet-only" || formData.get("walletRequired") === "on",
                 requireSolanaMobile: formData.get("requireSolanaMobile") === "on",
                 requireVerifiedSeeker: formData.get("requireVerifiedSeeker") === "on",
                 allowPreviousReleases: formData.get("allowPreviousReleases") === "on",
@@ -155,11 +176,12 @@ export function ReleaseUploadForm({
             <div className="grid gap-4">
               <div className="grid gap-2">
                 <Label htmlFor="accessMode">Visibility preset</Label>
-                <Select id="accessMode" name="accessMode" defaultValue="invite">
+                <Select id="accessMode" name="accessMode" value={accessMode} onChange={(event) => setAccessMode(event.target.value)}>
                   <option value="invite">Private by invite</option>
                   <option value="group">Tester group restricted</option>
                   <option value="wallet-only">Wallet allowlist</option>
                 </Select>
+                <div className="text-sm leading-6 text-muted-foreground">{accessSummary}</div>
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="testerGroupId">Tester group</Label>

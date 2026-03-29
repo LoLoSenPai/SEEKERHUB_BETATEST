@@ -20,9 +20,11 @@ describe("evaluateReleaseAccess", () => {
       testerMemberships: [],
       inviteClaims: [
         {
+          grantedAt: new Date("2026-03-28T10:00:00.000Z"),
           inviteLink: {
             projectId: "project",
             releaseId: null,
+            maxUses: null,
           },
         },
       ],
@@ -144,5 +146,41 @@ describe("evaluateReleaseAccess", () => {
 
     expect(result.canView).toBe(true);
     expect(result.reasons).toHaveLength(0);
+  });
+
+  it("requires a granted seat for capped invite links", () => {
+    const result = evaluateReleaseAccess({
+      policy: {
+        id: "policy",
+        releaseId: "release",
+        requireInviteAcceptance: true,
+        testerGroupId: null,
+        requireLinkedWallet: false,
+        requireSolanaMobile: false,
+        requireVerifiedSeeker: false,
+        allowPreviousReleases: false,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        walletEntries: [],
+      },
+      testerMemberships: [],
+      inviteClaims: [
+        {
+          grantedAt: null,
+          inviteLink: {
+            projectId: "project",
+            releaseId: null,
+            maxUses: 10,
+          },
+        },
+      ],
+      wallets: [],
+      deviceProfile: null,
+      releaseId: "release",
+      projectId: "project",
+    });
+
+    expect(result.canView).toBe(false);
+    expect(result.reasons).toContain("An accepted invite is required for this release.");
   });
 });

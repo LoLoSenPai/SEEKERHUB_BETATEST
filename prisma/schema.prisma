@@ -191,6 +191,7 @@ model InviteClaim {
   id                            String                 @id @default(cuid())
   inviteLinkId                  String
   userId                        String
+  grantedAt                     DateTime?
   createdAt                     DateTime               @default(now())
   inviteLink                    InviteLink             @relation(fields: [inviteLinkId], references: [id], onDelete: Cascade)
   user                          User                   @relation(fields: [userId], references: [id], onDelete: Cascade)

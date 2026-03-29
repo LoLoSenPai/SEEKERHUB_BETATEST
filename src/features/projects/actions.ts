@@ -67,3 +67,29 @@ export async function updateProjectAction(formData: FormData) {
 
   revalidatePath(`/builder/apps/${project.slug}`);
 }
+
+export async function deleteProjectAction(formData: FormData) {
+  const session = await requireSession();
+  const projectId = String(formData.get("projectId"));
+  const confirmation = asOptionalString(formData.get("confirmation"));
+
+  const project = await prisma.appProject.findUnique({
+    where: { id: projectId },
+    select: { id: true, slug: true, name: true, ownerId: true },
+  });
+
+  if (!project || project.ownerId !== session.user.id) {
+    throw new Error("Project not found.");
+  }
+
+  if (confirmation !== project.name) {
+    redirect(`/builder/apps/${project.slug}?deleteError=confirmation`);
+  }
+
+  await prisma.appProject.delete({
+    where: { id: project.id },
+  });
+
+  revalidatePath("/builder");
+  redirect("/builder");
+}

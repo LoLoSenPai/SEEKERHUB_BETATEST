@@ -9,12 +9,19 @@ import { Label } from "@/src/components/ui/label";
 import { PendingSubmitButton } from "@/src/components/ui/pending-submit-button";
 import { Textarea } from "@/src/components/ui/textarea";
 import { getProjectForOwner } from "@/src/features/projects/queries";
-import { updateProjectAction } from "@/src/features/projects/actions";
+import { deleteProjectAction, updateProjectAction } from "@/src/features/projects/actions";
 import { requireSession } from "@/src/lib/session";
 import { compactChecksum, formatBytes } from "@/src/lib/utils";
 
-export default async function BuilderProjectPage({ params }: { params: Promise<{ slug: string }> }) {
+export default async function BuilderProjectPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ slug: string }>;
+  searchParams?: Promise<{ deleteError?: string }>;
+}) {
   const { slug } = await params;
+  const resolvedSearchParams = searchParams ? await searchParams : undefined;
   const session = await requireSession();
   const project = await getProjectForOwner(slug, session.user.id);
 
@@ -30,26 +37,59 @@ export default async function BuilderProjectPage({ params }: { params: Promise<{
       subtitle={project.description || "No project description yet."}
     >
       <div className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
-        <Card className="rounded-[1.75rem]">
-          <CardHeader>
-            <CardTitle>Project settings</CardTitle>
-            <CardDescription>Update the core project details that anchor releases, invite links, and tester groups.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form action={updateProjectAction} className="grid gap-5">
-              <input type="hidden" name="projectId" value={project.id} />
-              <div className="grid gap-2">
-                <Label htmlFor="name">App name</Label>
-                <Input id="name" name="name" defaultValue={project.name} required />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="description">Description</Label>
-                <Textarea id="description" name="description" defaultValue={project.description ?? ""} />
-              </div>
-              <PendingSubmitButton idleLabel="Save project" pendingLabel="Saving project..." />
-            </form>
-          </CardContent>
-        </Card>
+        <div className="grid gap-6">
+          <Card className="rounded-[1.75rem]">
+            <CardHeader>
+              <CardTitle>Project settings</CardTitle>
+              <CardDescription>Update the core project details that anchor releases, invite links, and tester groups.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form action={updateProjectAction} className="grid gap-5">
+                <input type="hidden" name="projectId" value={project.id} />
+                <div className="grid gap-2">
+                  <Label htmlFor="name">App name</Label>
+                  <Input id="name" name="name" defaultValue={project.name} required />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="description">Description</Label>
+                  <Textarea id="description" name="description" defaultValue={project.description ?? ""} />
+                </div>
+                <PendingSubmitButton idleLabel="Save project" pendingLabel="Saving project..." />
+              </form>
+            </CardContent>
+          </Card>
+
+          <Card className="rounded-[1.75rem] border-danger/30">
+            <CardHeader>
+              <CardTitle>Danger zone</CardTitle>
+              <CardDescription>
+                Delete this project and all related releases, invite links, tester memberships, and feedback records.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form action={deleteProjectAction} className="grid gap-5">
+                <input type="hidden" name="projectId" value={project.id} />
+                <div className="rounded-[1.25rem] border border-danger/20 bg-danger/5 px-4 py-3 text-sm text-muted-foreground">
+                  This action is irreversible. Type <span className="font-semibold text-foreground">{project.name}</span> to confirm.
+                </div>
+                {resolvedSearchParams?.deleteError === "confirmation" ? (
+                  <div className="rounded-[1.25rem] border border-danger/20 bg-danger/5 px-4 py-3 text-sm text-danger">
+                    The confirmation text did not match the project name.
+                  </div>
+                ) : null}
+                <div className="grid gap-2">
+                  <Label htmlFor="confirmation">Project name confirmation</Label>
+                  <Input id="confirmation" name="confirmation" placeholder={project.name} required />
+                </div>
+                <PendingSubmitButton
+                  variant="danger"
+                  idleLabel="Delete project"
+                  pendingLabel="Deleting project..."
+                />
+              </form>
+            </CardContent>
+          </Card>
+        </div>
 
         <Card className="rounded-[1.75rem]">
           <CardHeader className="flex items-start justify-between gap-4 sm:flex-row">

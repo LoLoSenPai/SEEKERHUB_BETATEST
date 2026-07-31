@@ -90,8 +90,6 @@ integrationDescribe("public beta database invariants", () => {
   });
 
   afterAll(async () => {
-    await prisma.user.deleteMany({ where: { email: { endsWith: testEmailSuffix } } });
-    await prisma.rateLimit.deleteMany({ where: { key: hashedAuthKey } });
     await prisma.$disconnect();
   });
 

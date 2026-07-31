@@ -68,7 +68,6 @@ jobs:
           done
           docker logs seekerhub-minio
           exit 1
-      - run: npx playwright install --with-deps chromium
       - run: npm run db:migrate:deploy
       - run: npm run audit:production
       - run: npm run lint
@@ -76,4 +75,5 @@ jobs:
       - run: npm test
       - run: npm run test:integration
       - run: npm run build
+      - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e

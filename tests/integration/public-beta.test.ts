@@ -3,7 +3,7 @@ import { mkdtemp, readFile, rmdir, unlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { CreateBucketCommand } from "@aws-sdk/client-s3";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "@/src/lib/db";
 import { AppError } from "@/src/lib/errors";
 import { hashedAuthRateLimitStorage } from "@/src/lib/auth-rate-limit";
@@ -87,10 +87,6 @@ integrationDescribe("public beta database invariants", () => {
       },
     });
     projectId = project.id;
-  });
-
-  afterAll(async () => {
-    await prisma.$disconnect();
   });
 
   it("stores auth rate-limit identities as atomic HMAC keys", async () => {

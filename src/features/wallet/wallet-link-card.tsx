@@ -16,6 +16,7 @@ type LinkedWalletSummary = {
   verifiedAt: Date;
   isPrimary: boolean;
   seekerGenesisVerifiedAt: Date | null;
+  seekerGenesisVerificationExpiresAt: Date | null;
 };
 
 export function WalletLinkCard({ linkedWallets }: { linkedWallets: LinkedWalletSummary[] }) {
@@ -27,6 +28,10 @@ export function WalletLinkCard({ linkedWallets }: { linkedWallets: LinkedWalletS
   const connectedLinkedWallet = connectedWalletAddress
     ? linkedWallets.find((linkedWallet) => linkedWallet.address === connectedWalletAddress)
     : null;
+  const connectedSeekerVerified = Boolean(
+    connectedLinkedWallet?.seekerGenesisVerificationExpiresAt &&
+      new Date(connectedLinkedWallet.seekerGenesisVerificationExpiresAt) > new Date(),
+  );
 
   return (
     <Card className="rounded-[1.6rem]">
@@ -51,8 +56,18 @@ export function WalletLinkCard({ linkedWallets }: { linkedWallets: LinkedWalletS
                     <Badge variant={linkedWallet.isPrimary ? "brand" : "neutral"}>
                       {linkedWallet.isPrimary ? "Primary wallet" : "Linked wallet"}
                     </Badge>
-                    <Badge variant={linkedWallet.seekerGenesisVerifiedAt ? "success" : "neutral"}>
-                      {linkedWallet.seekerGenesisVerifiedAt ? "Seeker verified" : "Standard wallet"}
+                    <Badge
+                      variant={
+                        linkedWallet.seekerGenesisVerificationExpiresAt &&
+                        new Date(linkedWallet.seekerGenesisVerificationExpiresAt) > new Date()
+                          ? "success"
+                          : "neutral"
+                      }
+                    >
+                      {linkedWallet.seekerGenesisVerificationExpiresAt &&
+                      new Date(linkedWallet.seekerGenesisVerificationExpiresAt) > new Date()
+                        ? "Seeker verified (24h)"
+                        : "Standard wallet"}
                     </Badge>
                     {connectedWalletAddress === linkedWallet.address ? <Badge>Currently connected</Badge> : null}
                   </div>
@@ -66,8 +81,8 @@ export function WalletLinkCard({ linkedWallets }: { linkedWallets: LinkedWalletS
         </div>
         {connectedLinkedWallet ? (
           <div className="rounded-[1.2rem] border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
-            {connectedLinkedWallet.seekerGenesisVerifiedAt
-              ? "This connected wallet is already linked and verified as a Seeker wallet."
+            {connectedSeekerVerified
+              ? "This connected wallet has a current 24-hour Seeker verification."
               : "This connected wallet is already linked. Run Seeker verification if a release requires it."}
           </div>
         ) : null}
@@ -119,14 +134,27 @@ export function WalletLinkCard({ linkedWallets }: { linkedWallets: LinkedWalletS
           </Button>
           <Button
             variant="secondary"
-            disabled={!wallet.publicKey || verifying || Boolean(connectedLinkedWallet?.seekerGenesisVerifiedAt)}
+            disabled={!wallet.publicKey || !wallet.signMessage || verifying || !connectedLinkedWallet || connectedSeekerVerified}
             onClick={async () => {
+              if (!wallet.publicKey || !wallet.signMessage) return;
               setVerifying(true);
               try {
+                const challengeResponse = await fetch("/api/wallet/challenge", {
+                  method: "POST",
+                  headers: { "content-type": "application/json" },
+                  body: JSON.stringify({ address: wallet.publicKey.toBase58(), purpose: "VERIFY_SGT" }),
+                });
+                const challengePayload = await challengeResponse.json();
+                if (!challengeResponse.ok) throw new Error(challengePayload.error ?? "Unable to start Seeker verification.");
+                const signature = await wallet.signMessage(new TextEncoder().encode(challengePayload.message));
                 const response = await fetch("/api/wallet/verify-seeker", {
                   method: "POST",
                   headers: { "content-type": "application/json" },
-                  body: JSON.stringify({ address: wallet.publicKey?.toBase58() }),
+                  body: JSON.stringify({
+                    challengeId: challengePayload.challengeId,
+                    address: wallet.publicKey.toBase58(),
+                    signature: bs58.encode(signature),
+                  }),
                 });
                 const payload = await response.json();
 
@@ -145,7 +173,7 @@ export function WalletLinkCard({ linkedWallets }: { linkedWallets: LinkedWalletS
           >
             {verifying
               ? "Checking..."
-              : connectedLinkedWallet?.seekerGenesisVerifiedAt
+              : connectedSeekerVerified
                 ? "Seeker already verified"
                 : "Verify Seeker wallet"}
           </Button>

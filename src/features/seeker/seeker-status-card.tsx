@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/src
 import { useDeviceContext } from "@/src/features/seeker/use-device-context";
 
 export function SeekerStatusCard({ verifiedSeeker }: { verifiedSeeker: boolean }) {
-  const { context } = useDeviceContext(verifiedSeeker);
+  const { context } = useDeviceContext();
 
   return (
     <Card className="rounded-[1.6rem]">
@@ -17,7 +17,7 @@ export function SeekerStatusCard({ verifiedSeeker }: { verifiedSeeker: boolean }
       </CardHeader>
       <CardContent className="space-y-4 text-sm text-foreground">
         <div className="flex flex-wrap gap-2">
-          <Badge variant={context.isSeeker ? "success" : "neutral"}>{context.isSeeker ? "Seeker aware" : "Not verified as Seeker"}</Badge>
+          <Badge variant={verifiedSeeker ? "success" : "neutral"}>{verifiedSeeker ? "SGT verified (24h)" : context.isSeeker ? "Seeker browser hint" : "No current SGT proof"}</Badge>
           <Badge variant={context.isSolanaMobileCapable ? "brand" : "neutral"}>
             {context.isSolanaMobileCapable ? "Solana Mobile capable" : "Standard browser context"}
           </Badge>
@@ -26,7 +26,7 @@ export function SeekerStatusCard({ verifiedSeeker }: { verifiedSeeker: boolean }
         <div>Browser: {context.browserName ?? "Unknown"}</div>
         <div>OS: {context.osName ?? "Unknown"}</div>
         <div>Device class: {context.deviceClass}</div>
-        <div>Recognition source: {context.recognitionSource}</div>
+        <div>Device recognition source: {context.recognitionSource} (advisory only)</div>
       </CardContent>
     </Card>
   );

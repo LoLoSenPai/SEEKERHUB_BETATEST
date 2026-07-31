@@ -5,34 +5,43 @@
   "engines": {
     "node": "24.x"
   },
+  "overrides": {
+    "postcss": "8.5.25",
+    "next": {
+      "sharp": "0.35.3"
+    }
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
-    "typecheck": "tsc --noEmit",
+    "audit:production": "node scripts/audit-production.mjs",
+    "typecheck": "tsc --noEmit --incremental false",
     "test": "vitest run",
+    "test:integration": "vitest run --config vitest.integration.config.mts",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "db:generate": "prisma generate",
-    "db:push": "prisma db push",
+    "db:push:local": "prisma db push",
     "db:migrate": "prisma migrate dev",
+    "db:migrate:deploy": "prisma migrate deploy",
     "db:studio": "prisma studio",
     "postinstall": "prisma generate"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.917.0",
     "@aws-sdk/s3-request-presigner": "^3.917.0",
+    "@devicefarmer/adbkit-apkreader": "^3.2.4",
     "@neondatabase/serverless": "1.1.0",
     "@prisma/adapter-neon": "6.19.3",
+    "@prisma/adapter-pg": "6.19.3",
     "@prisma/client": "6.19.3",
     "@solana-mobile/wallet-adapter-mobile": "^2.1.11",
     "@solana/spl-token": "^0.4.14",
     "@solana/wallet-adapter-base": "^0.9.27",
-    "@solana/wallet-adapter-phantom": "^0.9.28",
     "@solana/wallet-adapter-react": "^0.15.39",
     "@solana/wallet-adapter-react-ui": "^0.9.39",
-    "@solana/wallet-adapter-solflare": "^0.6.32",
     "@solana/wallet-standard-util": "^1.1.2",
     "@solana/web3.js": "^1.98.4",
     "better-auth": "1.6.25",
@@ -44,8 +53,10 @@
     "lucide-react": "^0.542.0",
     "nanoid": "^5.1.6",
     "next": "16.2.12",
+    "pg": "^8.22.0",
     "react": "19.2.4",
     "react-dom": "19.2.4",
+    "resend": "^6.18.1",
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.3.1",
     "tweetnacl": "^1.0.3",
@@ -53,9 +64,11 @@
     "zod": "^4.1.11"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.12.1",
     "@playwright/test": "^1.56.1",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^24.13.3",
+    "@types/pg": "^8.20.0",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@types/yauzl": "^2.10.3",

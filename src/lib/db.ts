@@ -1,4 +1,5 @@
 import { PrismaNeon } from "@prisma/adapter-neon";
+import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
 import { getServerEnv } from "@/src/lib/env";
 
@@ -7,9 +8,11 @@ declare global {
 }
 
 function createPrismaClient() {
-  const adapter = new PrismaNeon({
-    connectionString: getServerEnv().DATABASE_URL,
-  });
+  const connectionString = getServerEnv().DATABASE_URL;
+  const hostname = new URL(connectionString).hostname;
+  const adapter = hostname.endsWith(".neon.tech")
+    ? new PrismaNeon({ connectionString })
+    : new PrismaPg({ connectionString });
 
   return new PrismaClient({
     adapter,

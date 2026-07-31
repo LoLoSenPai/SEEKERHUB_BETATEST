@@ -1,8 +1,9 @@
 import Link from "next/link";
-import { AppWindow, Boxes, Smartphone } from "lucide-react";
+import { AppWindow, Boxes, Smartphone, Trash2 } from "lucide-react";
 import { Badge } from "@/src/components/ui/badge";
 import { cn } from "@/src/lib/utils";
 import { SignOutButton } from "@/src/components/layout/sign-out-button";
+import { ThemeToggle } from "@/src/components/theme/theme-toggle";
 
 type NavItem = {
   href: string;
@@ -13,6 +14,7 @@ type NavItem = {
 const builderItems: NavItem[] = [
   { href: "/builder", label: "Overview", icon: AppWindow },
   { href: "/builder/apps/new", label: "New app", icon: Boxes },
+  { href: "/builder/trash", label: "Trash", icon: Trash2 },
 ];
 
 const testerItems: NavItem[] = [{ href: "/tester", label: "My releases", icon: Smartphone }];
@@ -22,12 +24,14 @@ export function DashboardFrame({
   currentPath,
   title,
   subtitle,
+  canBuild = false,
   children,
 }: {
   kind: "builder" | "tester";
   currentPath: string;
   title: string;
   subtitle: string;
+  canBuild?: boolean;
   children: React.ReactNode;
 }) {
   const items = kind === "builder" ? builderItems : testerItems;
@@ -41,8 +45,13 @@ export function DashboardFrame({
             <h1 className="mt-2 text-3xl font-semibold tracking-tight">{title}</h1>
             <p className="mt-2 text-sm leading-7 text-muted-foreground">{subtitle}</p>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
+            {kind === "builder" || canBuild ? <div className="flex items-center rounded-full border border-border bg-card p-1">
+              <Link href="/builder" className={cn("rounded-full px-3 py-1.5 text-xs font-semibold", kind === "builder" && "bg-primary text-primary-foreground")}>Builder workspace</Link>
+              <Link href="/tester" className={cn("rounded-full px-3 py-1.5 text-xs font-semibold", kind === "tester" && "bg-primary text-primary-foreground")}>Testing</Link>
+            </div> : null}
             <Badge variant="brand">{kind === "builder" ? "PRIVATE RELEASES" : "MOBILE FIRST"}</Badge>
+            <ThemeToggle />
             <SignOutButton />
           </div>
         </div>

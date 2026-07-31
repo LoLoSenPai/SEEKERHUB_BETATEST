@@ -8,21 +8,22 @@ import { Label } from "@/src/components/ui/label";
 import { PendingSubmitButton } from "@/src/components/ui/pending-submit-button";
 import { Select } from "@/src/components/ui/select";
 import { InviteLinkCopyButton } from "@/src/features/invites/invite-link-copy-button";
+import { InviteExpiryField } from "@/src/features/invites/invite-expiry-field";
 import { createInviteLinkAction, revokeInviteLinkAction } from "@/src/features/invites/actions";
 import { getProjectForOwner } from "@/src/features/projects/queries";
 import { buildInviteShareUrl, decryptInviteToken } from "@/src/lib/invite";
-import { requireSession } from "@/src/lib/session";
+import { requireBuilderSession } from "@/src/lib/session";
 
 export default async function InvitesPage({
   params,
   searchParams,
 }: {
   params: Promise<{ slug: string }>;
-  searchParams: Promise<{ token?: string; error?: string }>;
+  searchParams: Promise<{ created?: string; error?: string }>;
 }) {
   const { slug } = await params;
-  const { token, error } = await searchParams;
-  const session = await requireSession();
+  const { created, error } = await searchParams;
+  const session = await requireBuilderSession();
   const project = await getProjectForOwner(slug, session.user.id);
 
   if (!project) {
@@ -30,13 +31,10 @@ export default async function InvitesPage({
   }
 
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
-  const generatedLink = token ? buildInviteShareUrl(token, appUrl) : null;
   const inviteLinks = project.inviteLinks.map((invite) => {
     let shareUrl: string | null = null;
     const acceptedClaims = invite.inviteClaims.length;
-    const grantedSeats = invite.maxUses
-      ? invite.inviteClaims.filter((claim) => Boolean(claim.grantedAt)).length
-      : acceptedClaims;
+    const grantedSeats = invite.inviteClaims.filter((claim) => Boolean(claim.grantedAt)).length;
     const hasReachedMaxUses = invite.maxUses ? grantedSeats >= invite.maxUses : false;
     const isExpired = Boolean(invite.expiresAt && invite.expiresAt < new Date());
     const isRevoked = Boolean(invite.revokedAt);
@@ -61,6 +59,7 @@ export default async function InvitesPage({
       shareUrl,
     };
   });
+  const generatedLink = created ? inviteLinks.find((invite) => invite.id === created)?.shareUrl ?? null : null;
 
   return (
     <DashboardFrame
@@ -122,10 +121,7 @@ export default async function InvitesPage({
                   <Label htmlFor="maxUses">Max uses</Label>
                   <Input id="maxUses" name="maxUses" type="number" min={1} placeholder="10" />
                 </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="expiresAt">Expires at</Label>
-                  <Input id="expiresAt" name="expiresAt" type="datetime-local" />
-                </div>
+                <InviteExpiryField />
               </div>
               <PendingSubmitButton idleLabel="Create invite" pendingLabel="Creating invite..." />
             </form>

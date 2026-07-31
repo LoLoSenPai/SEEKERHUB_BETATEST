@@ -13,13 +13,12 @@ describe("detectDeviceContextFromUserAgent", () => {
     expect(result.deviceClass).toBe("MOBILE");
   });
 
-  it("marks verified seeker context when wallet proof exists", () => {
+  it("keeps desktop device detection advisory", () => {
     const result = detectDeviceContextFromUserAgent({
       userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)",
-      verifiedSeeker: true,
     });
 
-    expect(result.isSeeker).toBe(true);
-    expect(result.recognitionSource).toBe("VERIFIED_WALLET_SGT");
+    expect(result.isSeeker).toBe(false);
+    expect(result.recognitionSource).toBe("NONE");
   });
 });

@@ -5,13 +5,19 @@ import { Input } from "@/src/components/ui/input";
 import { Label } from "@/src/components/ui/label";
 import { PendingSubmitButton } from "@/src/components/ui/pending-submit-button";
 import { Textarea } from "@/src/components/ui/textarea";
-import { createTesterGroupAction } from "@/src/features/groups/actions";
+import {
+  createTesterGroupAction,
+  deleteTesterGroupAction,
+  reactivateTesterAccessAction,
+  revokeTesterAccessAction,
+  updateTesterGroupAction,
+} from "@/src/features/groups/actions";
 import { getProjectForOwner } from "@/src/features/projects/queries";
-import { requireSession } from "@/src/lib/session";
+import { requireBuilderSession } from "@/src/lib/session";
 
 export default async function GroupsPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  const session = await requireSession();
+  const session = await requireBuilderSession();
   const project = await getProjectForOwner(slug, session.user.id);
 
   if (!project) {
@@ -57,8 +63,34 @@ export default async function GroupsPage({ params }: { params: Promise<{ slug: s
             {project.testerGroups.length ? (
               project.testerGroups.map((group) => (
                 <div key={group.id} className="rounded-[1.4rem] border border-border bg-card p-4">
-                  <div className="text-lg font-semibold">{group.name}</div>
-                  <div className="mt-2 text-sm leading-7 text-muted-foreground">{group.description || "No description."}</div>
+                  <form action={updateTesterGroupAction} className="grid gap-3">
+                    <input type="hidden" name="groupId" value={group.id} />
+                    <input type="hidden" name="projectSlug" value={project.slug} />
+                    <Input name="name" defaultValue={group.name} aria-label={`${group.name} name`} required />
+                    <Textarea name="description" defaultValue={group.description ?? ""} aria-label={`${group.name} description`} />
+                    <PendingSubmitButton variant="secondary" idleLabel="Save group" pendingLabel="Saving..." />
+                  </form>
+                  <div className="mt-4 border-t border-border pt-4">
+                    <div className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Active testers</div>
+                    <div className="mt-3 grid gap-2">
+                      {group.memberships.length ? group.memberships.map((membership) => (
+                        <div key={membership.id} className="flex items-center justify-between gap-3 rounded-xl bg-muted/60 px-3 py-2 text-sm">
+                          <span className="truncate">{membership.user.email}</span>
+                          <form action={revokeTesterAccessAction}>
+                            <input type="hidden" name="projectId" value={project.id} />
+                            <input type="hidden" name="projectSlug" value={project.slug} />
+                            <input type="hidden" name="userId" value={membership.userId} />
+                            <PendingSubmitButton variant="danger" size="sm" idleLabel="Revoke" pendingLabel="Revoking..." />
+                          </form>
+                        </div>
+                      )) : <div className="text-sm text-muted-foreground">No granted testers in this group.</div>}
+                    </div>
+                  </div>
+                  <form action={deleteTesterGroupAction} className="mt-4">
+                    <input type="hidden" name="groupId" value={group.id} />
+                    <input type="hidden" name="projectSlug" value={project.slug} />
+                    <PendingSubmitButton variant="danger" size="sm" idleLabel="Delete unused group" pendingLabel="Deleting..." />
+                  </form>
                 </div>
               ))
             ) : (
@@ -69,6 +101,40 @@ export default async function GroupsPage({ params }: { params: Promise<{ slug: s
           </CardContent>
         </Card>
       </div>
+
+      <Card className="mt-6 rounded-[1.75rem]">
+        <CardHeader>
+          <CardTitle>Project tester access</CardTitle>
+          <CardDescription>
+            Revocation applies to every current and future invite link for this project. Reactivation permits a new claim but does not restore old claims automatically.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {project.testerAccesses.length ? project.testerAccesses.map((access) => (
+            <div key={access.id} className="flex flex-wrap items-center justify-between gap-3 rounded-[1.2rem] border border-border bg-card p-4">
+              <div>
+                <div className="font-medium text-foreground">{access.user.email}</div>
+                <div className="mt-1 text-xs text-muted-foreground">{access.revokedAt ? "Access revoked" : "Access active"}</div>
+              </div>
+              <form action={access.revokedAt ? reactivateTesterAccessAction : revokeTesterAccessAction}>
+                <input type="hidden" name="projectId" value={project.id} />
+                <input type="hidden" name="projectSlug" value={project.slug} />
+                <input type="hidden" name="userId" value={access.userId} />
+                <PendingSubmitButton
+                  variant={access.revokedAt ? "secondary" : "danger"}
+                  size="sm"
+                  idleLabel={access.revokedAt ? "Reactivate" : "Revoke project access"}
+                  pendingLabel={access.revokedAt ? "Reactivating..." : "Revoking..."}
+                />
+              </form>
+            </div>
+          )) : (
+            <div className="rounded-[1.3rem] border border-dashed border-border bg-card px-4 py-8 text-center text-sm text-muted-foreground">
+              No tester has claimed access to this project yet.
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </DashboardFrame>
   );
 }

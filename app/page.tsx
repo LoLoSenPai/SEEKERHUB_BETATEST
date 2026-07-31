@@ -3,6 +3,7 @@ import { ArrowRight, ShieldCheck, Smartphone, UploadCloud } from "lucide-react";
 import { buttonVariants } from "@/src/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/src/components/ui/card";
 import { cn } from "@/src/lib/utils";
+import { ThemeToggle } from "@/src/components/theme/theme-toggle";
 
 export default function Home() {
   return (
@@ -18,11 +19,9 @@ export default function Home() {
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <Link href="/sign-in" className={cn(buttonVariants({ variant: "ghost", size: "sm" }))}>
+            <ThemeToggle />
+            <Link href="/sign-in?intent=builder" className={cn(buttonVariants({ variant: "ghost", size: "sm" }))}>
               Sign in
-            </Link>
-            <Link href="/sign-up" className={buttonVariants({ size: "sm" })}>
-              Start building
             </Link>
           </div>
         </header>
@@ -41,13 +40,30 @@ export default function Home() {
                 and keep the mobile wallet and Seeker layer ready from day one.
               </p>
             </div>
-            <div className="flex flex-col gap-3 sm:flex-row">
-              <Link href="/sign-up" className={buttonVariants({ size: "lg" })}>
-                Create builder account
-                <ArrowRight className="size-4" />
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Link
+                href="/sign-up?intent=builder&returnTo=/builder/onboarding"
+                className="group rounded-[1.5rem] border border-primary bg-primary p-5 text-primary-foreground shadow-lg transition hover:-translate-y-0.5"
+              >
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <div className="text-lg font-semibold">Publish an app</div>
+                    <div className="mt-1 text-sm opacity-75">Create a builder workspace and ship an APK.</div>
+                  </div>
+                  <ArrowRight className="size-5 transition group-hover:translate-x-1" />
+                </div>
               </Link>
-              <Link href="/tester" className={buttonVariants({ variant: "secondary", size: "lg" })}>
-                Open tester dashboard
+              <Link
+                href="/tester"
+                className="group rounded-[1.5rem] border border-border bg-surface p-5 text-foreground shadow-sm transition hover:-translate-y-0.5 hover:bg-card"
+              >
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <div className="text-lg font-semibold">I&apos;m a tester</div>
+                    <div className="mt-1 text-sm text-muted-foreground">Open an invite or recover existing access.</div>
+                  </div>
+                  <ArrowRight className="size-5 transition group-hover:translate-x-1" />
+                </div>
               </Link>
             </div>
             <div className="grid gap-4 sm:grid-cols-3">
@@ -124,6 +140,10 @@ export default function Home() {
             </div>
           </div>
         </section>
+        <footer className="flex flex-wrap items-center justify-between gap-4 border-t border-border py-6 text-xs text-muted-foreground">
+          <span>SeekerHub public beta</span>
+          <div className="flex gap-4"><Link href="/privacy">Privacy</Link><Link href="/terms">Terms</Link><Link href="/abuse">Report abuse</Link></div>
+        </footer>
       </div>
     </main>
   );

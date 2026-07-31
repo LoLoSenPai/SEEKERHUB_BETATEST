@@ -3,16 +3,25 @@ import { auth } from "@/src/lib/auth";
 import { prisma } from "@/src/lib/db";
 import { getTesterRelease } from "@/src/features/projects/queries";
 import { feedbackInputSchema } from "@/src/lib/validation";
+import { apiError, AppError } from "@/src/lib/errors";
+import { consumeRateLimit, RATE_LIMITS } from "@/src/lib/rate-limit";
 
 export async function POST(request: Request) {
   try {
     const session = await auth.api.getSession({ headers: request.headers });
 
     if (!session) {
-      return NextResponse.json({ error: "Authentication required." }, { status: 401 });
+      throw new AppError("Authentication required.", 401, "AUTH_REQUIRED");
     }
 
     const body = feedbackInputSchema.parse(await request.json());
+    await consumeRateLimit({
+      request,
+      action: "feedback.submit",
+      ...RATE_LIMITS.feedback,
+      userId: session.user.id,
+      scope: body.releaseId,
+    });
     const testerRelease = await getTesterRelease(body.releaseId, session.user.id);
 
     if (!testerRelease?.decision.canSubmitFeedback) {
@@ -40,18 +49,18 @@ export async function POST(request: Request) {
         title: body.title,
         description: body.description,
         severity: body.severity,
-        deviceContextJson: body.deviceContext ?? undefined,
+        deviceContextJson: body.deviceProfileId
+          ? {
+              source: "persisted-device-profile",
+              profileId: body.deviceProfileId,
+            }
+          : undefined,
       },
       select: { id: true },
     });
 
     return NextResponse.json(feedback);
   } catch (error) {
-    return NextResponse.json(
-      {
-        error: error instanceof Error ? error.message : "Unable to submit feedback.",
-      },
-      { status: 400 },
-    );
+    return apiError(error, "Unable to submit feedback.");
   }
 }

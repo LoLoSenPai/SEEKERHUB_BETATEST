@@ -28,11 +28,9 @@ function detectOs(ua: string) {
 export function detectDeviceContextFromUserAgent({
   userAgent,
   platformLabel,
-  verifiedSeeker = false,
 }: {
   userAgent: string;
   platformLabel?: string;
-  verifiedSeeker?: boolean;
 }): DeviceContext {
   const browserName = detectBrowser(userAgent);
   const osName = detectOs(userAgent);
@@ -42,12 +40,10 @@ export function detectDeviceContextFromUserAgent({
   const seekerHint = /Seeker/i.test(userAgent);
   const isSolanaMobileCapable = isChromeAndroid || inWalletBrowser;
   const hasMobileWalletAdapterContext = isSolanaMobileCapable;
-  const isSeeker = verifiedSeeker || seekerHint;
+  const isSeeker = seekerHint;
 
   let recognitionSource: DeviceContext["recognitionSource"] = "NONE";
-  if (verifiedSeeker) {
-    recognitionSource = "VERIFIED_WALLET_SGT";
-  } else if (seekerHint || isSolanaMobileCapable) {
+  if (seekerHint || isSolanaMobileCapable) {
     recognitionSource = hasMobileWalletAdapterContext ? "WALLET_CONTEXT" : "USER_AGENT";
   }
 

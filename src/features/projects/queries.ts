@@ -1,14 +1,24 @@
 import { prisma } from "@/src/lib/db";
 import { hashInviteToken } from "@/src/lib/invite";
-import { resolveInviteAcceptanceForRelease } from "@/src/lib/invite-access";
 import { evaluateReleaseAccess } from "@/src/lib/access";
 
 export async function getBuilderDashboard(userId: string) {
-  const [projects, invitesAccepted, downloads, feedback] = await Promise.all([
+  const [
+    projects,
+    claims,
+    grantedPlaces,
+    uniqueTesterRows,
+    downloads,
+    uniqueViewRows,
+    feedback,
+    retainedProjectCount,
+    retainedReleaseCount,
+  ] = await Promise.all([
     prisma.appProject.findMany({
-      where: { ownerId: userId },
+      where: { ownerId: userId, deletedAt: null },
       include: {
         releases: {
+          where: { deletedAt: null },
           include: {
             downloadEvents: true,
             feedbackReports: true,
@@ -24,11 +34,15 @@ export async function getBuilderDashboard(userId: string) {
       orderBy: { updatedAt: "desc" },
     }),
     prisma.inviteClaim.count({
-      where: {
-        inviteLink: {
-          createdById: userId,
-        },
-      },
+      where: { inviteLink: { project: { ownerId: userId } } },
+    }),
+    prisma.inviteClaim.count({
+      where: { grantedAt: { not: null }, revokedAt: null, inviteLink: { project: { ownerId: userId } } },
+    }),
+    prisma.inviteClaim.findMany({
+      where: { grantedAt: { not: null }, revokedAt: null, inviteLink: { project: { ownerId: userId } } },
+      distinct: ["userId"],
+      select: { userId: true },
     }),
     prisma.downloadEvent.count({
       where: {
@@ -39,6 +53,11 @@ export async function getBuilderDashboard(userId: string) {
         },
       },
     }),
+    prisma.releaseViewEvent.findMany({
+      where: { userId: { not: null }, release: { project: { ownerId: userId } } },
+      distinct: ["releaseId", "userId"],
+      select: { releaseId: true, userId: true },
+    }),
     prisma.feedbackReport.count({
       where: {
         release: {
@@ -48,27 +67,23 @@ export async function getBuilderDashboard(userId: string) {
         },
       },
     }),
+    prisma.appProject.count({ where: { ownerId: userId } }),
+    prisma.release.count({ where: { project: { ownerId: userId } } }),
   ]);
-
-  const invitedTesters = projects.reduce(
-    (total, project) =>
-      total +
-      project.releases.reduce(
-        (releaseTotal, release) => releaseTotal + release.inviteLinks.reduce((acc, invite) => acc + (invite.maxUses ?? 1), 0),
-        0,
-      ),
-    0,
-  );
 
   return {
     projects,
     stats: {
       projectCount: projects.length,
       releaseCount: projects.reduce((count, project) => count + project.releases.length, 0),
-      invitedTesters,
-      invitesAccepted,
+      claims,
+      grantedPlaces,
+      uniqueTesters: uniqueTesterRows.length,
+      uniqueViews: uniqueViewRows.length,
       downloads,
       feedback,
+      retainedProjectCount,
+      retainedReleaseCount,
     },
   };
 }
@@ -78,9 +93,16 @@ export async function getProjectForOwner(slug: string, userId: string) {
     where: {
       slug,
       ownerId: userId,
+      deletedAt: null,
     },
     include: {
       testerGroups: {
+        include: {
+          memberships: {
+            where: { revokedAt: null },
+            include: { user: true },
+          },
+        },
         orderBy: { name: "asc" },
       },
       inviteLinks: {
@@ -91,7 +113,12 @@ export async function getProjectForOwner(slug: string, userId: string) {
         },
         orderBy: { createdAt: "desc" },
       },
+      testerAccesses: {
+        include: { user: true },
+        orderBy: { updatedAt: "desc" },
+      },
       releases: {
+        where: { deletedAt: null },
         include: {
           buildAsset: true,
           accessPolicy: {
@@ -113,13 +140,15 @@ export async function getReleaseForOwner(slug: string, releaseId: string, userId
   return prisma.release.findFirst({
     where: {
       id: releaseId,
+      deletedAt: null,
       project: {
         slug,
         ownerId: userId,
+        deletedAt: null,
       },
     },
     include: {
-      project: true,
+      project: { include: { testerGroups: { orderBy: { name: "asc" } } } },
       buildAsset: true,
       accessPolicy: {
         include: {
@@ -148,6 +177,10 @@ export async function getInvitePreview(token: string) {
   return prisma.inviteLink.findFirst({
     where: {
       tokenHash: hashInviteToken(token),
+      revokedAt: null,
+      AND: [{ OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }] }],
+      project: { deletedAt: null },
+      OR: [{ releaseId: null }, { release: { deletedAt: null } }],
     },
     include: {
       project: true,
@@ -165,9 +198,10 @@ export async function getAccessibleReleasesForUser(userId: string) {
       include: {
         wallets: true,
         testerMemberships: true,
+        testerAccesses: true,
         inviteClaims: {
           include: {
-            inviteLink: true,
+            inviteLink: { include: { release: { include: { accessPolicy: true } } } },
           },
         },
         deviceProfiles: {
@@ -179,6 +213,8 @@ export async function getAccessibleReleasesForUser(userId: string) {
     prisma.release.findMany({
       where: {
         status: "PUBLISHED",
+        deletedAt: null,
+        project: { deletedAt: null },
       },
       include: {
         project: true,
@@ -196,37 +232,26 @@ export async function getAccessibleReleasesForUser(userId: string) {
   if (!user) return [];
 
   const accessibleReleases: typeof releases = [];
-  let resolvedInviteClaims = user.inviteClaims;
-
   for (const release of releases) {
     if (!release.accessPolicy) {
       continue;
     }
 
-    const inviteResolution = await resolveInviteAcceptanceForRelease({
-      userId,
-      policy: release.accessPolicy,
-      testerMemberships: user.testerMemberships,
-      inviteClaims: resolvedInviteClaims,
-      wallets: user.wallets,
-      deviceProfile: user.deviceProfiles[0] ?? null,
-      releaseId: release.id,
-      projectId: release.projectId,
-    });
-
-    resolvedInviteClaims = inviteResolution.inviteClaims;
-
     const decision = evaluateReleaseAccess({
       policy: release.accessPolicy,
       testerMemberships: user.testerMemberships,
-      inviteClaims: resolvedInviteClaims,
+      inviteClaims: user.inviteClaims,
       wallets: user.wallets,
       deviceProfile: user.deviceProfiles[0] ?? null,
       releaseId: release.id,
       projectId: release.projectId,
+      releasePublishedAt: release.publishedAt,
+      testerAccessRevoked: user.testerAccesses.some(
+        (access) => access.projectId === release.projectId && Boolean(access.revokedAt),
+      ),
     });
 
-    if (decision.canView) {
+    if (decision.canViewMetadata) {
       accessibleReleases.push(release);
     }
   }
@@ -256,9 +281,10 @@ export async function getTesterRelease(releaseId: string, userId: string) {
       include: {
         wallets: true,
         testerMemberships: true,
+        testerAccesses: true,
         inviteClaims: {
           include: {
-            inviteLink: true,
+            inviteLink: { include: { release: { include: { accessPolicy: true } } } },
           },
         },
         deviceProfiles: {
@@ -267,8 +293,8 @@ export async function getTesterRelease(releaseId: string, userId: string) {
         },
       },
     }),
-    prisma.release.findUnique({
-      where: { id: releaseId },
+    prisma.release.findFirst({
+      where: { id: releaseId, status: "PUBLISHED", deletedAt: null, project: { deletedAt: null } },
       include: {
         project: true,
         buildAsset: true,
@@ -285,8 +311,7 @@ export async function getTesterRelease(releaseId: string, userId: string) {
     return null;
   }
 
-  const inviteResolution = await resolveInviteAcceptanceForRelease({
-    userId,
+  const decision = evaluateReleaseAccess({
     policy: release.accessPolicy,
     testerMemberships: user.testerMemberships,
     inviteClaims: user.inviteClaims,
@@ -294,27 +319,11 @@ export async function getTesterRelease(releaseId: string, userId: string) {
     deviceProfile: user.deviceProfiles[0] ?? null,
     releaseId: release.id,
     projectId: release.projectId,
+    releasePublishedAt: release.publishedAt,
+    testerAccessRevoked: user.testerAccesses.some(
+      (access) => access.projectId === release.projectId && Boolean(access.revokedAt),
+    ),
   });
-
-  const decision = evaluateReleaseAccess({
-    policy: release.accessPolicy,
-    testerMemberships: user.testerMemberships,
-    inviteClaims: inviteResolution.inviteClaims,
-    wallets: user.wallets,
-    deviceProfile: user.deviceProfiles[0] ?? null,
-    releaseId: release.id,
-    projectId: release.projectId,
-  });
-
-  if (
-    inviteResolution.inviteCapacityReason &&
-    decision.reasons.includes("An accepted invite is required for this release.")
-  ) {
-    const capacityReason = inviteResolution.inviteCapacityReason;
-    decision.reasons = decision.reasons.map((reason) =>
-      reason === "An accepted invite is required for this release." ? capacityReason : reason,
-    );
-  }
 
   return {
     release,

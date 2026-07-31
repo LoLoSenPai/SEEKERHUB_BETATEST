@@ -6,12 +6,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/src
 import { EmptyState } from "@/src/components/ui/empty-state";
 import { StatCard } from "@/src/components/ui/stat-card";
 import { getBuilderDashboard } from "@/src/features/projects/queries";
-import { requireSession } from "@/src/lib/session";
-import { cn, formatRelativeCount } from "@/src/lib/utils";
+import { requireBuilderSession } from "@/src/lib/session";
+import { cn, formatBytes, formatRelativeCount } from "@/src/lib/utils";
 
 export default async function BuilderDashboardPage() {
-  const session = await requireSession();
+  const session = await requireBuilderSession();
   const { projects, stats } = await getBuilderDashboard(session.user.id);
+  const atProjectQuota = stats.retainedProjectCount >= session.builderProfile.maxProjects;
 
   return (
     <DashboardFrame
@@ -21,11 +22,13 @@ export default async function BuilderDashboardPage() {
       subtitle="Manage Android projects, upload private APK releases, invite testers, and watch the beta funnel move."
     >
       <div className="space-y-6">
-        <div className="grid gap-4 xl:grid-cols-4 md:grid-cols-2">
+        <div className="grid gap-4 xl:grid-cols-3 md:grid-cols-2">
           <StatCard label="Projects" value={stats.projectCount} hint="Builder-owned apps" />
           <StatCard label="Releases" value={stats.releaseCount} hint="Published beta builds" />
-          <StatCard label="Invite accepts" value={stats.invitesAccepted} hint="Tester claims recorded" />
-          <StatCard label="Downloads" value={stats.downloads} hint="Private APK deliveries" />
+          <StatCard label="Claims" value={stats.claims} hint="Invite links accepted" />
+          <StatCard label="Granted places" value={stats.grantedPlaces} hint={`${stats.uniqueTesters} unique testers`} />
+          <StatCard label="Unique views" value={stats.uniqueViews} hint="Release pages opened" />
+          <StatCard label="Download links" value={stats.downloads} hint={`${stats.feedback} feedback reports`} />
         </div>
 
         <Card className="rounded-[1.75rem]">
@@ -36,9 +39,7 @@ export default async function BuilderDashboardPage() {
                 Each project owns releases, tester groups, invite links, access policies, and release analytics.
               </CardDescription>
             </div>
-            <Link href="/builder/apps/new" className={buttonVariants()}>
-              New app project
-            </Link>
+            {atProjectQuota ? <span className="rounded-full bg-muted px-4 py-2 text-sm font-semibold text-muted-foreground">Project quota reached</span> : <Link href="/builder/apps/new" className={buttonVariants()}>New app project</Link>}
           </CardHeader>
           <CardContent className="space-y-4">
             {projects.length ? (
@@ -68,17 +69,22 @@ export default async function BuilderDashboardPage() {
               ))
             ) : (
               <EmptyState
-                title="No app projects yet"
-                description="Create the first Android project so you can upload a signed APK, define tester access, and start the private beta loop."
+                title={atProjectQuota ? "No active projects" : "No app projects yet"}
+                description={
+                  atProjectQuota
+                    ? "Your retained project is in the seven-day trash window. Restore it or purge its storage before creating another project."
+                    : "Create the first Android project so you can upload a signed APK, define tester access, and start the private beta loop."
+                }
                 action={
-                  <Link href="/builder/apps/new" className={cn(buttonVariants())}>
-                    Create first project
+                  <Link href={atProjectQuota ? "/builder/trash" : "/builder/apps/new"} className={cn(buttonVariants())}>
+                    {atProjectQuota ? "Review trash" : "Create first project"}
                   </Link>
                 }
               />
             )}
           </CardContent>
         </Card>
+        <Card className="rounded-[1.75rem]"><CardHeader><CardTitle>Builder quota</CardTitle><CardDescription>Trash continues counting until the storage deletion job completes.</CardDescription></CardHeader><CardContent className="grid gap-2 text-sm text-muted-foreground sm:grid-cols-3"><div>{stats.retainedProjectCount} / {session.builderProfile.maxProjects} projects</div><div>{stats.retainedReleaseCount} / {session.builderProfile.maxStoredReleases} retained releases</div><div>{formatBytes(session.builderProfile.usedStorageBytes + session.builderProfile.reservedStorageBytes)} / {formatBytes(session.builderProfile.maxStorageBytes)} storage</div></CardContent></Card>
       </div>
     </DashboardFrame>
   );

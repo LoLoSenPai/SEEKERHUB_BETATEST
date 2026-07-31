@@ -11,7 +11,7 @@ import { SeekerStatusCard } from "@/src/features/seeker/seeker-status-card";
 import { WalletLinkCard } from "@/src/features/wallet/wallet-link-card";
 import { getAccessibleReleasesForUser, getTesterRelease } from "@/src/features/projects/queries";
 import { prisma } from "@/src/lib/db";
-import { requireSession } from "@/src/lib/session";
+import { requireTesterSession } from "@/src/lib/session";
 import { compactChecksum, formatBytes } from "@/src/lib/utils";
 
 export default async function TesterReleaseDetailPage({
@@ -20,29 +20,33 @@ export default async function TesterReleaseDetailPage({
   params: Promise<{ releaseId: string }>;
 }) {
   const { releaseId } = await params;
-  const session = await requireSession();
+  const session = await requireTesterSession(`/tester/releases/${releaseId}`);
   const testerRelease = await getTesterRelease(releaseId, session.user.id);
 
-  if (!testerRelease) {
+  if (!testerRelease || !testerRelease.decision.canViewMetadata) {
     notFound();
   }
 
   const { release, decision, user } = testerRelease;
+  const canBuild = Boolean(await prisma.builderProfile.findUnique({ where: { userId: session.user.id }, select: { id: true } }));
   const previousReleases = release.accessPolicy?.allowPreviousReleases
-    ? (await getAccessibleReleasesForUser(session.user.id)).filter(
-        (candidate) => candidate.projectId === release.projectId && candidate.id !== release.id,
+      ? (await getAccessibleReleasesForUser(session.user.id)).filter(
+        (candidate) => candidate.projectId === release.projectId && candidate.publishedAt < release.publishedAt,
       )
     : [];
-  const verifiedSeeker = user.wallets.some((wallet) => Boolean(wallet.seekerGenesisVerifiedAt));
+  const verifiedSeeker = user.wallets.some(
+    (wallet) => wallet.seekerGenesisVerificationExpiresAt && wallet.seekerGenesisVerificationExpiresAt > new Date(),
+  );
 
-  if (decision.canView) {
-    await prisma.releaseViewEvent.create({
-      data: {
-        releaseId,
-        userId: session.user.id,
-        deviceProfileId: user.deviceProfiles[0]?.id,
-      },
+  if (decision.canViewMetadata) {
+    const recentView = await prisma.releaseViewEvent.findFirst({
+      where: { releaseId, userId: session.user.id },
     });
+    if (!recentView) {
+      await prisma.releaseViewEvent.create({
+        data: { releaseId, userId: session.user.id, deviceProfileId: user.deviceProfiles[0]?.id },
+      });
+    }
   }
 
   return (
@@ -51,6 +55,7 @@ export default async function TesterReleaseDetailPage({
       currentPath="/tester"
       title={`${release.project.name} ${release.versionName}`}
       subtitle="Download the private build, verify metadata, and report release-specific issues back to the builder."
+      canBuild={canBuild}
     >
       <div className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
         <div className="space-y-6">
@@ -73,7 +78,7 @@ export default async function TesterReleaseDetailPage({
             </CardContent>
           </Card>
 
-          {decision.canView ? (
+          {decision.canDownload ? (
             <Card className="rounded-[1.75rem]">
               <CardHeader>
                 <CardTitle>Download build</CardTitle>
@@ -93,8 +98,8 @@ export default async function TesterReleaseDetailPage({
                 <CardDescription>One or more policy checks still block this release.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-2 text-sm text-rose-700">
-                {decision.reasons.map((reason) => (
-                  <div key={reason}>{reason}</div>
+                {decision.reasons.filter((reason) => reason.blocking).map((reason) => (
+                  <div key={reason.code}>{reason.message}</div>
                 ))}
               </CardContent>
             </Card>

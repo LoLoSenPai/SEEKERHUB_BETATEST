@@ -8,7 +8,7 @@ import { WalletLinkCard } from "@/src/features/wallet/wallet-link-card";
 import { SeekerStatusCard } from "@/src/features/seeker/seeker-status-card";
 import { getAccessibleReleasesForUser, getTesterIdentity } from "@/src/features/projects/queries";
 import { requireTesterSession } from "@/src/lib/session";
-import { compactChecksum, cn, formatBytes } from "@/src/lib/utils";
+import { cn, formatBytes } from "@/src/lib/utils";
 import { prisma } from "@/src/lib/db";
 
 export default async function TesterDashboardPage() {
@@ -28,31 +28,17 @@ export default async function TesterDashboardPage() {
     <DashboardFrame
       kind="tester"
       currentPath="/tester"
-      title="Accessible releases"
-      subtitle="Claim invite links, link a wallet when needed, and keep the release-detail flow mobile first."
+      title="Your beta apps"
+      subtitle="Open a build, install the APK, and send feedback to its builder."
       canBuild={canBuild}
+      identityLabel={session.user.isAnonymous ? "Guest tester" : session.user.email}
     >
-      {session.user.isAnonymous ? (
-        <Card className="mb-6 rounded-[1.75rem] border-brand/30 bg-brand/5">
-          <CardHeader>
-            <CardTitle>Protect this guest access</CardTitle>
-            <CardDescription>
-              Add an email magic link so these invites, downloads, feedback reports, and linked wallets can be recovered on another device.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Link href="/tester/upgrade" className={cn(buttonVariants())}>Protect tester access</Link>
-          </CardContent>
-        </Card>
-      ) : null}
       <div className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
         <div className="space-y-6">
           <Card className="rounded-[1.75rem]">
             <CardHeader>
-              <CardTitle>My builds</CardTitle>
-              <CardDescription>
-                Releases are shown only after server-side access evaluation across invites, tester groups, wallet allowlists, and optional Seeker rules.
-              </CardDescription>
+              <CardTitle>Ready to test</CardTitle>
+              <CardDescription>Only apps you can currently access appear here.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               {releases.length ? (
@@ -60,21 +46,19 @@ export default async function TesterDashboardPage() {
                   <Link
                     key={release.id}
                     href={`/tester/releases/${release.id}`}
-                    className="block rounded-[1.4rem] border border-border bg-card p-5 transition hover:bg-muted/60 hover:shadow-md"
+                    className="block min-w-0 rounded-[1.4rem] border border-border bg-card p-5 transition hover:bg-muted/60 hover:shadow-md"
                   >
                     <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                       <div className="space-y-2">
-                        <div className="flex flex-wrap items-center gap-3">
-                          <h3 className="text-lg font-semibold">
-                            {release.project.name} {release.versionName}
-                          </h3>
-                          <Badge variant="brand">{release.versionCode}</Badge>
+                        <div className="flex min-w-0 flex-wrap items-center gap-3">
+                          <h3 className="min-w-0 break-words text-lg font-semibold">{release.project.name}</h3>
+                          <Badge variant="brand">v{release.versionName}</Badge>
                         </div>
                         <p className="line-clamp-2 text-sm leading-7 text-muted-foreground">{release.changelog}</p>
                       </div>
-                      <div className="grid gap-2 text-sm text-muted-foreground lg:text-right">
+                      <div className="flex items-center justify-between gap-3 text-sm text-muted-foreground lg:grid lg:text-right">
                         <div>{release.buildAsset ? formatBytes(release.buildAsset.fileSizeBytes) : "No asset"}</div>
-                        <div>{release.buildAsset ? compactChecksum(release.buildAsset.sha256Checksum) : "No checksum"}</div>
+                        <div className="font-semibold text-brand">Open build</div>
                       </div>
                     </div>
                   </Link>
@@ -95,6 +79,15 @@ export default async function TesterDashboardPage() {
         </div>
 
         <div className="space-y-6">
+          {session.user.isAnonymous ? (
+            <Card className="rounded-[1.75rem] border-brand/30 bg-brand/5">
+              <CardHeader>
+                <CardTitle>Keep your tester access</CardTitle>
+                <CardDescription>Add an email so your apps and feedback remain available on another device.</CardDescription>
+              </CardHeader>
+              <CardContent><Link href="/tester/upgrade" className={cn(buttonVariants())}>Add recovery email</Link></CardContent>
+            </Card>
+          ) : null}
           <WalletLinkCard linkedWallets={tester?.wallets ?? []} />
           <SeekerStatusCard verifiedSeeker={verifiedSeeker} />
         </div>

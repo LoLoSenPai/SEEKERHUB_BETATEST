@@ -34,17 +34,17 @@ export function WalletLinkCard({ linkedWallets }: { linkedWallets: LinkedWalletS
   );
 
   return (
-    <Card className="rounded-[1.6rem]">
+    <Card className="min-w-0 overflow-hidden rounded-[1.6rem]">
       <CardHeader>
-        <CardTitle>Wallet and Seeker access</CardTitle>
+        <CardTitle>Wallet access</CardTitle>
         <CardDescription>
           Link a Solana wallet when a release needs wallet gating, allowlists, or optional verified Seeker ownership.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <WalletConnectButton />
-        <div className="text-sm text-muted-foreground">
-          {connectedWalletAddress ? `Connected wallet: ${connectedWalletAddress}` : "No wallet connected yet."}
+        <div className="min-w-0 text-sm text-muted-foreground">
+          {connectedWalletAddress ? <>Connected wallet: <span className="break-all font-mono text-xs text-foreground">{connectedWalletAddress}</span></> : "No wallet connected yet."}
         </div>
         <div className="rounded-[1.2rem] border border-border bg-muted/40 p-4">
           <div className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Linked wallets</div>

@@ -21,6 +21,7 @@ export async function updateReleasePolicyAction(formData: FormData) {
   });
   if (!release) throw new Error("Release not found.");
 
+  const accessPreset = String(formData.get("accessPreset") ?? "invite");
   const policy = accessPolicyInputSchema.parse({
     requireInviteAcceptance: bool(formData, "requireInviteAcceptance"),
     testerGroupId: String(formData.get("testerGroupId") ?? "").trim() || null,
@@ -30,6 +31,12 @@ export async function updateReleasePolicyAction(formData: FormData) {
     allowPreviousReleases: bool(formData, "allowPreviousReleases"),
     walletAllowlist: String(formData.get("walletAllowlist") ?? "").split(/\r?\n/).map((value) => value.trim()).filter(Boolean),
   });
+  if (accessPreset === "wallet" && policy.walletAllowlist.length === 0) {
+    throw new Error("Add at least one Solana address for the wallet allowlist preset.");
+  }
+  if (accessPreset === "group" && !policy.testerGroupId) {
+    throw new Error("Select a tester group for the group-restricted preset.");
+  }
   if (policy.testerGroupId) {
     const group = await prisma.testerGroup.findFirst({ where: { id: policy.testerGroupId, projectId: release.projectId } });
     if (!group) throw new Error("Tester group not found in this project.");

@@ -19,6 +19,7 @@ export default async function NewReleasePage({ params }: { params: Promise<{ slu
       currentPath="/builder"
       title={`Upload release for ${project.name}`}
       subtitle="Presigned upload first, server-side APK validation second, then publish a private beta release with a clean access policy."
+      identityLabel={session.user.email}
     >
       <ReleaseUploadForm
         projectId={project.id}

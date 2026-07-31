@@ -18,10 +18,11 @@ export function FeedbackForm({ releaseId }: { releaseId: string }) {
       className="grid gap-4"
       onSubmit={async (event) => {
         event.preventDefault();
+        const form = event.currentTarget;
         setLoading(true);
 
         try {
-          const formData = new FormData(event.currentTarget);
+          const formData = new FormData(form);
           const persistedDeviceProfileId = await persistDeviceProfile();
           const response = await fetch("/api/feedback", {
             method: "POST",
@@ -42,7 +43,7 @@ export function FeedbackForm({ releaseId }: { releaseId: string }) {
           }
 
           toast.success("Feedback sent.");
-          event.currentTarget.reset();
+          form.reset();
         } catch (error) {
           toast.error(error instanceof Error ? error.message : "Feedback submission failed.");
         } finally {

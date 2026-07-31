@@ -26,11 +26,10 @@ export function InviteClaimCard({
   return (
     <Card className="rounded-[2rem] border-border bg-surface shadow-[0_24px_90px_rgba(15,23,42,0.08)]">
       <CardHeader>
-        <div className="section-eyebrow">Invite access</div>
-        <CardTitle>{label}</CardTitle>
+        <div className="section-eyebrow">Private Android beta</div>
+        <CardTitle className="break-words text-2xl">{projectName}</CardTitle>
         <CardDescription>
-          Claim access to {projectName}
-          {releaseVersion ? ` (${releaseVersion})` : ""}. If you do not have a tester account yet, SeekerHub creates a lightweight guest session first.
+          {releaseVersion ? `Version ${releaseVersion}. ` : ""}Invite: {label}. No account is required to start; SeekerHub creates a recoverable guest session.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -69,7 +68,7 @@ export function InviteClaimCard({
             }
           }}
         >
-          {loading ? "Claiming access..." : "Claim invite"}
+          {loading ? "Opening beta access..." : "Open beta access"}
         </Button>
       </CardContent>
     </Card>

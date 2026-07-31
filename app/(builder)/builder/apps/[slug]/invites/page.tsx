@@ -3,8 +3,8 @@ import { notFound } from "next/navigation";
 import { DashboardFrame } from "@/src/components/layout/dashboard-frame";
 import { Badge } from "@/src/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/src/components/ui/card";
+import { FieldLabel } from "@/src/components/ui/field-help";
 import { Input } from "@/src/components/ui/input";
-import { Label } from "@/src/components/ui/label";
 import { PendingSubmitButton } from "@/src/components/ui/pending-submit-button";
 import { Select } from "@/src/components/ui/select";
 import { InviteLinkCopyButton } from "@/src/features/invites/invite-link-copy-button";
@@ -66,8 +66,16 @@ export default async function InvitesPage({
       kind="builder"
       currentPath="/builder"
       title={`${project.name} invite links`}
-      subtitle="Private invite links are the main acquisition path for testers in the MVP."
+      subtitle="Create a shareable link and control which eligible testers receive a place."
+      identityLabel={session.user.email}
     >
+      <Card className="mb-6 rounded-[1.75rem] border-brand/25 bg-brand/5">
+        <CardContent className="grid gap-4 p-5 md:grid-cols-3">
+          <div><div className="font-semibold">Open FCFS</div><p className="mt-1 text-sm leading-6 text-muted-foreground">Set Max uses. The first eligible testers receive places.</p></div>
+          <div><div className="font-semibold">One release only</div><p className="mt-1 text-sm leading-6 text-muted-foreground">Select a release when the link must not unlock later builds.</p></div>
+          <div><div className="font-semibold">Controlled cohort</div><p className="mt-1 text-sm leading-6 text-muted-foreground">Select a tester group when access should follow a reusable team.</p></div>
+        </CardContent>
+      </Card>
       <div className="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
         <Card className="rounded-[1.75rem]">
           <CardHeader>
@@ -91,11 +99,11 @@ export default async function InvitesPage({
               <input type="hidden" name="projectId" value={project.id} />
               <input type="hidden" name="projectSlug" value={project.slug} />
               <div className="grid gap-2">
-                <Label htmlFor="label">Label</Label>
+                <FieldLabel htmlFor="label" helpTitle="Internal label" help="Only builders see this name. Use it to recognize where the link was shared.">Internal label</FieldLabel>
                 <Input id="label" name="label" placeholder="Core QA wave" required />
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="releaseId">Release scope</Label>
+                <FieldLabel htmlFor="releaseId" helpTitle="Release scope" help="Project-wide links can grant access to current and future eligible releases. Select one release for a single-build campaign.">Release scope</FieldLabel>
                 <Select id="releaseId" name="releaseId" defaultValue="">
                   <option value="">Project-wide access</option>
                   {project.releases.map((release) => (
@@ -106,7 +114,7 @@ export default async function InvitesPage({
                 </Select>
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="testerGroupId">Tester group</Label>
+                <FieldLabel htmlFor="testerGroupId" helpTitle="Tester group" help="Optional. The tester receives a membership in this reusable cohort only after all release requirements are satisfied.">Tester group</FieldLabel>
                 <Select id="testerGroupId" name="testerGroupId" defaultValue="">
                   <option value="">No tester group</option>
                   {project.testerGroups.map((group) => (
@@ -118,12 +126,12 @@ export default async function InvitesPage({
               </div>
               <div className="grid gap-5 lg:grid-cols-2">
                 <div className="grid gap-2">
-                  <Label htmlFor="maxUses">Max uses</Label>
+                  <FieldLabel htmlFor="maxUses" helpTitle="FCFS place limit" help="Counts granted eligible places, not raw clicks or ineligible claims. Leave empty for no seat limit.">Max uses</FieldLabel>
                   <Input id="maxUses" name="maxUses" type="number" min={1} placeholder="10" />
                 </div>
                 <InviteExpiryField />
               </div>
-              <PendingSubmitButton idleLabel="Create invite" pendingLabel="Creating invite..." />
+              <PendingSubmitButton idleLabel="Create share link" pendingLabel="Creating share link..." />
             </form>
           </CardContent>
         </Card>
@@ -131,7 +139,7 @@ export default async function InvitesPage({
         <Card className="rounded-[1.75rem]">
           <CardHeader>
             <CardTitle>Existing invite links</CardTitle>
-            <CardDescription>Invite claims are counted separately for the MVP analytics layer.</CardDescription>
+            <CardDescription>Copy active links again at any time, review granted places, or revoke future claims.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             {inviteLinks.length ? (
@@ -169,9 +177,9 @@ export default async function InvitesPage({
                     )}
                   </div>
                   <div className="mt-3 grid gap-2 text-sm text-muted-foreground">
-                    <div>{invite.acceptedClaims} raw claims</div>
-                    <div>{invite.grantedSeats} granted seats</div>
-                    <div>Max uses: {invite.maxUses ?? "Unlimited"}</div>
+                    <div>{invite.acceptedClaims} link claims</div>
+                    <div>{invite.grantedSeats} eligible places granted</div>
+                    <div>Place limit: {invite.maxUses ?? "Unlimited"}</div>
                     <div>Expires: {invite.expiresAt ? format(invite.expiresAt, "PPP p") : "Never"}</div>
                     {invite.revokedAt ? <div>Revoked: {format(invite.revokedAt, "PPP p")}</div> : null}
                   </div>

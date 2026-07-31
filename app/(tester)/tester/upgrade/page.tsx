@@ -13,6 +13,7 @@ export default async function UpgradeTesterAccountPage() {
       currentPath="/tester"
       title="Protect tester access"
       subtitle="Convert this guest session into a durable tester account without losing accepted invites or activity."
+      identityLabel="Guest tester"
     >
       <EmailAuthForm mode="sign-in" intent="tester" returnTo="/tester" />
     </DashboardFrame>

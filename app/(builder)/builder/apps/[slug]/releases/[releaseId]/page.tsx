@@ -1,16 +1,15 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { format } from "date-fns";
 import { DashboardFrame } from "@/src/components/layout/dashboard-frame";
 import { Badge } from "@/src/components/ui/badge";
+import { buttonVariants } from "@/src/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/src/components/ui/card";
+import { AccessPolicyFields } from "@/src/features/releases/access-policy-fields";
 import { AccessPolicySummary } from "@/src/features/releases/access-policy-summary";
 import { getReleaseForOwner } from "@/src/features/projects/queries";
 import { requireBuilderSession } from "@/src/lib/session";
-import { compactChecksum, formatBytes } from "@/src/lib/utils";
-import { Input } from "@/src/components/ui/input";
-import { Label } from "@/src/components/ui/label";
-import { Select } from "@/src/components/ui/select";
-import { Textarea } from "@/src/components/ui/textarea";
+import { cn, formatBytes } from "@/src/lib/utils";
 import { PendingSubmitButton } from "@/src/components/ui/pending-submit-button";
 import { setReleaseArchivedAction, trashReleaseAction, updateReleasePolicyAction } from "@/src/features/releases/actions";
 
@@ -36,7 +35,15 @@ export default async function BuilderReleaseDetailPage({
       currentPath="/builder"
       title={`${release.project.name} ${release.versionName}`}
       subtitle="Release metadata, access policy, and the first analytics loop in one view."
+      identityLabel={session.user.email}
     >
+      <Card className="mb-6 rounded-[1.75rem] border-brand/25 bg-brand/5">
+        <CardContent className="grid gap-4 p-5 sm:grid-cols-3">
+          <Link href={`/builder/apps/${release.project.slug}`} className={cn(buttonVariants({ variant: "secondary" }), "justify-center")}>Back to app</Link>
+          <Link href={`/builder/apps/${release.project.slug}/invites`} className={cn(buttonVariants(), "justify-center")}>Create or copy invite</Link>
+          <Link href={`/builder/apps/${release.project.slug}/groups`} className={cn(buttonVariants({ variant: "secondary" }), "justify-center")}>Manage tester groups</Link>
+        </CardContent>
+      </Card>
       <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
         <Card className="rounded-[1.75rem]">
           <CardHeader>
@@ -46,17 +53,22 @@ export default async function BuilderReleaseDetailPage({
             </div>
             <CardDescription>Server-side finalized after the APK reached private storage.</CardDescription>
           </CardHeader>
-          <CardContent className="grid gap-4 text-sm text-foreground">
-            <div>Version name: {release.versionName}</div>
-            <div>Version code: {release.versionCode}</div>
-            <div>Android package: {release.project.androidPackageName ?? "Unknown"}</div>
-            <div>SDK range: min {release.minSdk ?? "?"} / target {release.targetSdk ?? "?"}</div>
-            <div>APK signature marker: {release.buildAsset?.hasApkSignature ? "Detected" : "Not detected"}</div>
-            <div>Published: {format(release.publishedAt, "PPP p")}</div>
-            <div>File size: {release.buildAsset ? formatBytes(release.buildAsset.fileSizeBytes) : "Unknown"}</div>
-            <div>Checksum: {release.buildAsset ? release.buildAsset.sha256Checksum : "Pending"}</div>
-            <div>Compact checksum: {release.buildAsset ? compactChecksum(release.buildAsset.sha256Checksum) : "Pending"}</div>
+          <CardContent className="grid min-w-0 gap-4 text-sm text-foreground">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div><span className="text-muted-foreground">Version</span><div className="mt-1 font-semibold">{release.versionName} ({release.versionCode})</div></div>
+              <div><span className="text-muted-foreground">Published</span><div className="mt-1 font-semibold">{format(release.publishedAt, "PPP p")}</div></div>
+              <div><span className="text-muted-foreground">APK size</span><div className="mt-1 font-semibold">{release.buildAsset ? formatBytes(release.buildAsset.fileSizeBytes) : "Unknown"}</div></div>
+              <div><span className="text-muted-foreground">Signature marker</span><div className="mt-1 font-semibold">{release.buildAsset?.hasApkSignature ? "Detected" : "Not detected"}</div></div>
+            </div>
             <div className="rounded-[1.3rem] bg-muted/70 p-4 whitespace-pre-wrap leading-7 text-muted-foreground">{release.changelog}</div>
+            <details className="min-w-0 rounded-[1.3rem] border border-border bg-card p-4">
+              <summary className="cursor-pointer font-semibold">Technical APK details</summary>
+              <div className="mt-4 grid min-w-0 gap-3 text-muted-foreground">
+                <div>Android package: <span className="break-all font-mono text-foreground">{release.project.androidPackageName ?? "Unknown"}</span></div>
+                <div>SDK range: min {release.minSdk ?? "?"} / target {release.targetSdk ?? "?"}</div>
+                <div>SHA-256: <span className="break-all font-mono text-foreground">{release.buildAsset?.sha256Checksum ?? "Pending"}</span></div>
+              </div>
+            </details>
           </CardContent>
         </Card>
 
@@ -72,15 +84,18 @@ export default async function BuilderReleaseDetailPage({
           <form action={updateReleasePolicyAction} className="grid gap-5">
             <input type="hidden" name="releaseId" value={release.id} />
             <input type="hidden" name="projectSlug" value={release.project.slug} />
-            <div className="grid gap-2"><Label htmlFor="testerGroupId">Tester group</Label><Select id="testerGroupId" name="testerGroupId" defaultValue={release.accessPolicy?.testerGroupId ?? ""}><option value="">No group restriction</option>{release.project.testerGroups.map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}</Select></div>
-            <div className="grid gap-2"><Label htmlFor="walletAllowlist">Wallet allowlist</Label><Textarea id="walletAllowlist" name="walletAllowlist" defaultValue={release.accessPolicy?.walletEntries.map((entry) => entry.address).join("\n") ?? ""} placeholder="One Solana address per line" /></div>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <label className="flex items-center gap-3 text-sm"><Input type="checkbox" name="requireInviteAcceptance" className="size-4" defaultChecked={release.accessPolicy?.requireInviteAcceptance} />Require invite acceptance</label>
-              <label className="flex items-center gap-3 text-sm"><Input type="checkbox" name="requireLinkedWallet" className="size-4" defaultChecked={release.accessPolicy?.requireLinkedWallet} />Require linked wallet</label>
-              <label className="flex items-center gap-3 text-sm"><Input type="checkbox" name="requireVerifiedSeeker" className="size-4" defaultChecked={release.accessPolicy?.requireVerifiedSeeker} />Require current SGT proof</label>
-              <label className="flex items-center gap-3 text-sm"><Input type="checkbox" name="requireSolanaMobile" className="size-4" defaultChecked={release.accessPolicy?.requireSolanaMobile} />Recommend Solana Mobile</label>
-              <label className="flex items-center gap-3 text-sm"><Input type="checkbox" name="allowPreviousReleases" className="size-4" defaultChecked={release.accessPolicy?.allowPreviousReleases} />Allow previous builds</label>
-            </div>
+            <AccessPolicyFields
+              groups={release.project.testerGroups.map((group) => ({ id: group.id, name: group.name }))}
+              defaults={{
+                requireInviteAcceptance: release.accessPolicy?.requireInviteAcceptance,
+                testerGroupId: release.accessPolicy?.testerGroupId,
+                requireLinkedWallet: release.accessPolicy?.requireLinkedWallet,
+                requireSolanaMobile: release.accessPolicy?.requireSolanaMobile,
+                requireVerifiedSeeker: release.accessPolicy?.requireVerifiedSeeker,
+                allowPreviousReleases: release.accessPolicy?.allowPreviousReleases,
+                walletAllowlist: release.accessPolicy?.walletEntries.map((entry) => entry.address).join("\n"),
+              }}
+            />
             <PendingSubmitButton idleLabel="Save access policy" pendingLabel="Saving policy..." />
           </form>
         </CardContent>

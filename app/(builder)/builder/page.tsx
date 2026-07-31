@@ -20,6 +20,7 @@ export default async function BuilderDashboardPage() {
       currentPath="/builder"
       title="Release operations"
       subtitle="Manage Android projects, upload private APK releases, invite testers, and watch the beta funnel move."
+      identityLabel={session.user.email}
     >
       <div className="space-y-6">
         <div className="grid gap-4 xl:grid-cols-3 md:grid-cols-2">

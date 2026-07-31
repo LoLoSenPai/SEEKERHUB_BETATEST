@@ -63,7 +63,7 @@ export function AccessPolicySummary({
             Wallet allowlist:
             <div className="mt-2 flex flex-wrap gap-2">
               {policy.walletEntries.length ? (
-                policy.walletEntries.map((entry) => <Badge key={entry.id ?? entry.address}>{entry.address}</Badge>)
+                policy.walletEntries.map((entry) => <Badge key={entry.id ?? entry.address} className="max-w-full break-all whitespace-normal">{entry.address}</Badge>)
               ) : (
                 <Badge>No allowlist entries</Badge>
               )}

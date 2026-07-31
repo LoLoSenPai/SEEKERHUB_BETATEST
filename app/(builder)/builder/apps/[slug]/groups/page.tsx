@@ -1,8 +1,8 @@
 import { notFound } from "next/navigation";
 import { DashboardFrame } from "@/src/components/layout/dashboard-frame";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/src/components/ui/card";
+import { FieldLabel } from "@/src/components/ui/field-help";
 import { Input } from "@/src/components/ui/input";
-import { Label } from "@/src/components/ui/label";
 import { PendingSubmitButton } from "@/src/components/ui/pending-submit-button";
 import { Textarea } from "@/src/components/ui/textarea";
 import {
@@ -29,24 +29,25 @@ export default async function GroupsPage({ params }: { params: Promise<{ slug: s
       kind="builder"
       currentPath="/builder"
       title={`${project.name} tester groups`}
-      subtitle="Use groups to scope private releases without creating a new policy model each time."
+      subtitle="Build reusable cohorts such as internal QA, creators, or community testers."
+      identityLabel={session.user.email}
     >
       <div className="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
         <Card className="rounded-[1.75rem]">
           <CardHeader>
             <CardTitle>Create tester group</CardTitle>
-            <CardDescription>Groups are reusable access targets for releases and invite links.</CardDescription>
+            <CardDescription>Create a group, select it on a release, then create an invite using that same group.</CardDescription>
           </CardHeader>
           <CardContent>
             <form action={createTesterGroupAction} className="grid gap-5">
               <input type="hidden" name="projectId" value={project.id} />
               <input type="hidden" name="projectSlug" value={project.slug} />
               <div className="grid gap-2">
-                <Label htmlFor="name">Name</Label>
+                <FieldLabel htmlFor="name" helpTitle="Group name" help="Use a stable cohort name such as Internal QA or Community Alpha. Testers do not need to enter it themselves.">Name</FieldLabel>
                 <Input id="name" name="name" placeholder="Core QA" required />
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="description">Description</Label>
+                <FieldLabel htmlFor="description" helpTitle="Group purpose" help="Optional internal note explaining who belongs in this cohort and what they should test.">Description</FieldLabel>
                 <Textarea id="description" name="description" placeholder="Who belongs to this cohort?" />
               </div>
               <PendingSubmitButton idleLabel="Create group" pendingLabel="Creating group..." />

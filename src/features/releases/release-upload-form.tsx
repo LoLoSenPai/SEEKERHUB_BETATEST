@@ -1,14 +1,14 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, UploadCloud } from "lucide-react";
 import { Button } from "@/src/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/src/components/ui/card";
 import { Input } from "@/src/components/ui/input";
 import { Label } from "@/src/components/ui/label";
-import { Select } from "@/src/components/ui/select";
 import { Textarea } from "@/src/components/ui/textarea";
+import { AccessPolicyFields } from "@/src/features/releases/access-policy-fields";
 
 type GroupOption = {
   id: string;
@@ -27,22 +27,8 @@ export function ReleaseUploadForm({
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [accessMode, setAccessMode] = useState("invite");
-  const [walletAllowlist, setWalletAllowlist] = useState("");
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadStage, setUploadStage] = useState<"idle" | "reserving" | "uploading" | "validating">("idle");
-  const groupChoices = useMemo(() => groups, [groups]);
-  const accessSummary = useMemo(() => {
-    if (accessMode === "group") {
-      return "Tester group restricted means the tester must first claim an invite that adds them to the selected group, then the release checks that group membership.";
-    }
-
-    if (accessMode === "wallet-only") {
-      return "Wallet allowlist skips invite acceptance. If the allowlist is empty, any linked wallet can open the release unless you also require verified Seeker.";
-    }
-
-    return "Private by invite means an accepted invite is the main gate. Wallet and Seeker requirements below are additional filters on top.";
-  }, [accessMode]);
 
   return (
     <Card className="rounded-[2rem]">
@@ -74,11 +60,21 @@ export function ReleaseUploadForm({
               return;
             }
 
-            const selectedAccessMode = String(formData.get("accessMode") ?? "invite");
+            const selectedAccessMode = String(formData.get("accessPreset") ?? "invite");
             const selectedTesterGroupId = String(formData.get("testerGroupId") ?? "").trim();
+            const selectedWalletAllowlist = String(formData.get("walletAllowlist") ?? "")
+              .split(/\r?\n/)
+              .map((item) => item.trim())
+              .filter(Boolean);
 
             if (selectedAccessMode === "group" && !selectedTesterGroupId) {
               setError("Select a tester group for the group-restricted preset.");
+              setLoading(false);
+              return;
+            }
+
+            if (selectedAccessMode === "wallet" && selectedWalletAllowlist.length === 0) {
+              setError("Add at least one Solana address for the wallet allowlist preset.");
               setLoading(false);
               return;
             }
@@ -89,16 +85,13 @@ export function ReleaseUploadForm({
               versionCode: 1,
               changelog: String(formData.get("changelog") ?? ""),
               accessPolicy: {
-                requireInviteAcceptance: selectedAccessMode !== "wallet-only",
+                requireInviteAcceptance: formData.get("requireInviteAcceptance") === "on",
                 testerGroupId: selectedTesterGroupId || null,
-                requireLinkedWallet: selectedAccessMode === "wallet-only" || formData.get("walletRequired") === "on",
+                requireLinkedWallet: formData.get("requireLinkedWallet") === "on",
                 requireSolanaMobile: formData.get("requireSolanaMobile") === "on",
                 requireVerifiedSeeker: formData.get("requireVerifiedSeeker") === "on",
                 allowPreviousReleases: formData.get("allowPreviousReleases") === "on",
-                walletAllowlist: walletAllowlist
-                  .split("\n")
-                  .map((item) => item.trim())
-                  .filter(Boolean),
+                walletAllowlist: selectedWalletAllowlist,
               },
             };
 
@@ -175,58 +168,15 @@ export function ReleaseUploadForm({
             <Input id="apk" name="apk" type="file" accept=".apk,application/vnd.android.package-archive,application/octet-stream" required />
           </div>
 
-          <div className="grid gap-5 rounded-[1.5rem] border border-border bg-muted/60 p-5 lg:grid-cols-2">
-            <div className="section-eyebrow lg:col-span-2">3 - Audience</div>
-            <div className="grid gap-4">
-              <div className="grid gap-2">
-                <Label htmlFor="accessMode">Visibility preset</Label>
-                <Select id="accessMode" name="accessMode" value={accessMode} onChange={(event) => setAccessMode(event.target.value)}>
-                  <option value="invite">Private by invite</option>
-                  <option value="group">Tester group restricted</option>
-                  <option value="wallet-only">Wallet allowlist</option>
-                </Select>
-                <div className="text-sm leading-6 text-muted-foreground">{accessSummary}</div>
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="testerGroupId">Tester group</Label>
-                <Select id="testerGroupId" name="testerGroupId" defaultValue="">
-                  <option value="">No tester group</option>
-                  {groupChoices.map((group) => (
-                    <option key={group.id} value={group.id}>
-                      {group.name}
-                    </option>
-                  ))}
-                </Select>
-              </div>
+          <div className="grid gap-5 rounded-[1.5rem] border border-border bg-muted/60 p-5">
+            <div>
+              <div className="section-eyebrow">3 - Audience</div>
+              <h3 className="mt-2 font-semibold text-foreground">Choose how testers get this build</h3>
+              <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                Pick the closest sharing model. You can change it later without uploading the APK again.
+              </p>
             </div>
-            <div className="grid gap-4">
-              <Label htmlFor="walletAllowlist">Wallet allowlist</Label>
-              <Textarea
-                id="walletAllowlist"
-                placeholder="One wallet address per line"
-                value={walletAllowlist}
-                onChange={(event) => setWalletAllowlist(event.target.value)}
-              />
-            </div>
-          </div>
-
-          <div className="grid gap-3 rounded-[1.5rem] border border-border bg-card p-5 sm:grid-cols-2">
-            <label className="flex items-center gap-3 text-sm text-foreground">
-              <input type="checkbox" name="walletRequired" className="size-4 rounded border-input" />
-              Require linked wallet
-            </label>
-            <label className="flex items-center gap-3 text-sm text-foreground">
-              <input type="checkbox" name="requireSolanaMobile" className="size-4 rounded border-input" />
-              Recommend a Solana Mobile capable device
-            </label>
-            <label className="flex items-center gap-3 text-sm text-foreground">
-              <input type="checkbox" name="requireVerifiedSeeker" className="size-4 rounded border-input" />
-              Require verified Seeker wallet
-            </label>
-            <label className="flex items-center gap-3 text-sm text-foreground">
-              <input type="checkbox" name="allowPreviousReleases" className="size-4 rounded border-input" />
-              Allow previous build browsing
-            </label>
+            <AccessPolicyFields groups={groups} />
           </div>
 
           <div aria-live="polite">

@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { FieldLabel } from "@/src/components/ui/field-help";
 import { Input } from "@/src/components/ui/input";
-import { Label } from "@/src/components/ui/label";
 
 export function InviteExpiryField() {
   const [value, setValue] = useState("");
@@ -10,7 +10,7 @@ export function InviteExpiryField() {
 
   return (
     <div className="grid gap-2">
-      <Label htmlFor="expiresAt">Expires at</Label>
+      <FieldLabel htmlFor="expiresAt" helpTitle="Expiration" help="Optional. After this local date and time, new claims are rejected; already granted places remain recorded.">Expires at</FieldLabel>
       <Input
         id="expiresAt"
         name="expiresAt"

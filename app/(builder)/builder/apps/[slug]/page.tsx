@@ -11,7 +11,7 @@ import { Textarea } from "@/src/components/ui/textarea";
 import { getProjectForOwner } from "@/src/features/projects/queries";
 import { deleteProjectAction, updateProjectAction } from "@/src/features/projects/actions";
 import { requireBuilderSession } from "@/src/lib/session";
-import { compactChecksum, formatBytes } from "@/src/lib/utils";
+import { formatBytes } from "@/src/lib/utils";
 
 export default async function BuilderProjectPage({
   params,
@@ -35,9 +35,31 @@ export default async function BuilderProjectPage({
       currentPath="/builder"
       title={project.name}
       subtitle={project.description || "No project description yet."}
+      identityLabel={session.user.email}
     >
+      <Card className="mb-6 rounded-[1.75rem] border-brand/25 bg-brand/5">
+        <CardHeader>
+          <div className="section-eyebrow">Beta workflow</div>
+          <CardTitle>Publish, share, learn, repeat</CardTitle>
+          <CardDescription>The recommended path for every new Android build.</CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <Link href={`/builder/apps/${project.slug}/releases/new`} className="rounded-2xl border border-border bg-card p-4 transition hover:bg-muted/60">
+            <div className="text-xs font-semibold text-brand">01</div><div className="mt-2 font-semibold">Upload APK</div><p className="mt-1 text-sm text-muted-foreground">Create the next release.</p>
+          </Link>
+          <div className="rounded-2xl border border-border bg-card p-4">
+            <div className="text-xs font-semibold text-brand">02</div><div className="mt-2 font-semibold">Choose audience</div><p className="mt-1 text-sm text-muted-foreground">FCFS, group, wallet, or Seeker.</p>
+          </div>
+          <Link href={`/builder/apps/${project.slug}/invites`} className="rounded-2xl border border-border bg-card p-4 transition hover:bg-muted/60">
+            <div className="text-xs font-semibold text-brand">03</div><div className="mt-2 font-semibold">Share invite</div><p className="mt-1 text-sm text-muted-foreground">Copy a controlled access link.</p>
+          </Link>
+          <div className="rounded-2xl border border-border bg-card p-4">
+            <div className="text-xs font-semibold text-brand">04</div><div className="mt-2 font-semibold">Review feedback</div><p className="mt-1 text-sm text-muted-foreground">Open a release to inspect reports.</p>
+          </div>
+        </CardContent>
+      </Card>
       <div className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
-        <div className="grid gap-6">
+        <div className="order-2 grid gap-6 xl:order-1">
           <Card className="rounded-[1.75rem]">
             <CardHeader>
               <CardTitle>Project settings</CardTitle>
@@ -91,7 +113,7 @@ export default async function BuilderProjectPage({
           </Card>
         </div>
 
-        <Card className="rounded-[1.75rem]">
+        <Card className="order-1 rounded-[1.75rem] xl:order-2">
           <CardHeader className="flex items-start justify-between gap-4 sm:flex-row">
             <div>
               <CardTitle>Project operations</CardTitle>
@@ -142,7 +164,6 @@ export default async function BuilderProjectPage({
                     <div>{release.downloadEvents.length} downloads</div>
                     <div>{release.feedbackReports.length} feedback reports</div>
                     <div>{release.buildAsset ? formatBytes(release.buildAsset.fileSizeBytes) : "No asset"}</div>
-                    <div>{release.buildAsset ? compactChecksum(release.buildAsset.sha256Checksum) : "Checksum pending"}</div>
                   </div>
                 </div>
               </Link>

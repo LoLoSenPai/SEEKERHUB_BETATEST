@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { AppWindow, Boxes, Smartphone, Trash2 } from "lucide-react";
+import { AppWindow, Boxes, CircleUserRound, Trash2 } from "lucide-react";
 import { Badge } from "@/src/components/ui/badge";
 import { cn } from "@/src/lib/utils";
 import { SignOutButton } from "@/src/components/layout/sign-out-button";
@@ -17,14 +17,13 @@ const builderItems: NavItem[] = [
   { href: "/builder/trash", label: "Trash", icon: Trash2 },
 ];
 
-const testerItems: NavItem[] = [{ href: "/tester", label: "My releases", icon: Smartphone }];
-
 export function DashboardFrame({
   kind,
   currentPath,
   title,
   subtitle,
   canBuild = false,
+  identityLabel = "Signed in",
   children,
 }: {
   kind: "builder" | "tester";
@@ -32,32 +31,39 @@ export function DashboardFrame({
   title: string;
   subtitle: string;
   canBuild?: boolean;
+  identityLabel?: string;
   children: React.ReactNode;
 }) {
-  const items = kind === "builder" ? builderItems : testerItems;
+  const items = builderItems;
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-background to-muted">
       <div className="page-shell">
-        <div className="flex flex-col gap-4 rounded-[1.75rem] border border-border bg-surface p-5 shadow-sm backdrop-blur lg:flex-row lg:items-center lg:justify-between">
-          <div>
+        <div className="grid min-w-0 gap-5 rounded-[1.75rem] border border-border bg-surface p-5 shadow-sm backdrop-blur lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+          <div className="min-w-0">
             <div className="section-eyebrow">{kind === "builder" ? "Builder workspace" : "Tester dashboard"}</div>
-            <h1 className="mt-2 text-3xl font-semibold tracking-tight">{title}</h1>
+            <h1 className="mt-2 break-words text-3xl font-semibold tracking-tight">{title}</h1>
             <p className="mt-2 text-sm leading-7 text-muted-foreground">{subtitle}</p>
           </div>
-          <div className="flex flex-wrap items-center gap-3">
-            {kind === "builder" || canBuild ? <div className="flex items-center rounded-full border border-border bg-card p-1">
-              <Link href="/builder" className={cn("rounded-full px-3 py-1.5 text-xs font-semibold", kind === "builder" && "bg-primary text-primary-foreground")}>Builder workspace</Link>
-              <Link href="/tester" className={cn("rounded-full px-3 py-1.5 text-xs font-semibold", kind === "tester" && "bg-primary text-primary-foreground")}>Testing</Link>
-            </div> : null}
-            <Badge variant="brand">{kind === "builder" ? "PRIVATE RELEASES" : "MOBILE FIRST"}</Badge>
-            <ThemeToggle />
-            <SignOutButton />
+          <div className="grid min-w-0 gap-3 lg:justify-items-end">
+            <div className="flex flex-wrap items-center gap-2">
+              {kind === "builder" || canBuild ? <div className="flex items-center rounded-full border border-border bg-card p-1">
+                <Link href="/builder" className={cn("rounded-full px-3 py-1.5 text-xs font-semibold", kind === "builder" && "bg-primary text-primary-foreground")}>Builder workspace</Link>
+                <Link href="/tester" className={cn("rounded-full px-3 py-1.5 text-xs font-semibold", kind === "tester" && "bg-primary text-primary-foreground")}>Testing</Link>
+              </div> : null}
+              <Badge variant="brand" className="hidden sm:inline-flex">{kind === "builder" ? "PRIVATE RELEASES" : "MOBILE FIRST"}</Badge>
+              <ThemeToggle />
+            </div>
+            <div className="flex min-w-0 max-w-full items-center rounded-full border border-border bg-card p-1 pl-3 shadow-sm">
+              <CircleUserRound className="size-4 shrink-0 text-success" aria-hidden="true" />
+              <span className="min-w-0 truncate px-2 text-xs font-semibold" title={identityLabel}>{identityLabel}</span>
+              <SignOutButton />
+            </div>
           </div>
         </div>
 
-        <div className="grid gap-6 lg:grid-cols-[250px_minmax(0,1fr)]">
-          <aside className="glass-panel h-fit p-4">
+        <div className={cn("grid min-w-0 gap-6", kind === "builder" && "lg:grid-cols-[250px_minmax(0,1fr)]")}>
+          {kind === "builder" ? <aside className="glass-panel h-fit p-4">
             <div className="px-3 py-2">
               <div className="font-mono text-xs uppercase tracking-[0.22em] text-muted-foreground">Navigate</div>
             </div>
@@ -81,7 +87,7 @@ export function DashboardFrame({
                 );
               })}
             </nav>
-          </aside>
+          </aside> : null}
           <section className="min-w-0">{children}</section>
         </div>
       </div>

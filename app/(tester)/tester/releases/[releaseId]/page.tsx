@@ -1,18 +1,17 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { format } from "date-fns";
+import { ArrowLeft, Download } from "lucide-react";
 import { DashboardFrame } from "@/src/components/layout/dashboard-frame";
 import { Badge } from "@/src/components/ui/badge";
 import { buttonVariants } from "@/src/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/src/components/ui/card";
 import { FeedbackForm } from "@/src/features/feedback/feedback-form";
-import { AccessPolicySummary } from "@/src/features/releases/access-policy-summary";
 import { SeekerStatusCard } from "@/src/features/seeker/seeker-status-card";
 import { WalletLinkCard } from "@/src/features/wallet/wallet-link-card";
 import { getAccessibleReleasesForUser, getTesterRelease } from "@/src/features/projects/queries";
 import { prisma } from "@/src/lib/db";
 import { requireTesterSession } from "@/src/lib/session";
-import { compactChecksum, formatBytes } from "@/src/lib/utils";
+import { cn, formatBytes } from "@/src/lib/utils";
 
 export default async function TesterReleaseDetailPage({
   params,
@@ -53,67 +52,55 @@ export default async function TesterReleaseDetailPage({
     <DashboardFrame
       kind="tester"
       currentPath="/tester"
-      title={`${release.project.name} ${release.versionName}`}
-      subtitle="Download the private build, verify metadata, and report release-specific issues back to the builder."
+      title={release.project.name}
+      subtitle={`Private Android beta, version ${release.versionName}`}
       canBuild={canBuild}
+      identityLabel={session.user.isAnonymous ? "Guest tester" : session.user.email}
     >
-      <div className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
-        <div className="space-y-6">
-          <Card className="rounded-[1.75rem]">
+      <Link href="/tester" className="mb-4 inline-flex items-center gap-2 text-sm font-semibold text-muted-foreground transition hover:text-foreground">
+        <ArrowLeft className="size-4" aria-hidden="true" />
+        Back to my beta apps
+      </Link>
+      <div className="grid min-w-0 gap-6 xl:grid-cols-[1.15fr_0.85fr]">
+        <div className="min-w-0 space-y-6">
+          <Card className="min-w-0 overflow-hidden rounded-[1.75rem] border-brand/25 bg-gradient-to-br from-card to-brand/5">
             <CardHeader>
-              <div className="flex items-center gap-3">
-                <CardTitle>Release details</CardTitle>
-                <Badge variant="brand">{release.versionCode}</Badge>
+              <div className="flex min-w-0 flex-wrap items-center gap-3">
+                <CardTitle className="min-w-0 break-words text-2xl">{release.project.name}</CardTitle>
+                <Badge variant="brand">v{release.versionName}</Badge>
               </div>
-              <CardDescription>Server-side release metadata computed when the APK was finalized.</CardDescription>
+              <CardDescription>
+                {release.buildAsset ? formatBytes(release.buildAsset.fileSizeBytes) : "Android APK"}
+              </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4 text-sm text-foreground">
-              <div>Version name: {release.versionName}</div>
-              <div>Version code: {release.versionCode}</div>
-              <div>Uploaded: {format(release.publishedAt, "PPP p")}</div>
-              <div>File size: {release.buildAsset ? formatBytes(release.buildAsset.fileSizeBytes) : "Unknown"}</div>
-              <div>Checksum: {release.buildAsset ? release.buildAsset.sha256Checksum : "Unavailable"}</div>
-              <div>Compact checksum: {release.buildAsset ? compactChecksum(release.buildAsset.sha256Checksum) : "Unavailable"}</div>
-              <div className="rounded-[1.3rem] bg-muted/70 p-4 whitespace-pre-wrap leading-7 text-muted-foreground">{release.changelog}</div>
+            <CardContent className="min-w-0 space-y-5">
+              <div className="whitespace-pre-wrap break-words rounded-[1.3rem] bg-muted/70 p-4 text-sm leading-7 text-muted-foreground">{release.changelog}</div>
+              {decision.canDownload ? (
+                <>
+                  <Link href={`/api/downloads/${release.id}`} className={cn(buttonVariants({ size: "lg" }), "w-full justify-center sm:w-auto")}>
+                    <Download className="size-4" aria-hidden="true" />
+                    Download APK
+                  </Link>
+                  <p className="text-xs leading-5 text-muted-foreground">Android may ask you to allow installs from this browser before opening the APK.</p>
+                </>
+              ) : (
+                <div className="rounded-[1.3rem] border border-danger/20 bg-danger/5 p-4 text-sm text-danger">
+                  <div className="font-semibold">Complete access before downloading</div>
+                  <div className="mt-2 grid gap-1">
+                    {decision.reasons.filter((reason) => reason.blocking).map((reason) => <div key={reason.code}>{reason.message}</div>)}
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
-
-          {decision.canDownload ? (
-            <Card className="rounded-[1.75rem]">
-              <CardHeader>
-                <CardTitle>Download build</CardTitle>
-                <CardDescription>APK access is revalidated server-side before each private download.</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <Link href={`/api/downloads/${release.id}`} className={buttonVariants({ size: "lg" })}>
-                  Download APK
-                </Link>
-                <div className="text-sm text-muted-foreground">If installation is blocked, make sure unknown-source installs are enabled on the device.</div>
-              </CardContent>
-            </Card>
-          ) : (
-            <Card className="rounded-[1.75rem] border-rose-100 bg-rose-50">
-              <CardHeader>
-                <CardTitle>Access not complete</CardTitle>
-                <CardDescription>One or more policy checks still block this release.</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-2 text-sm text-rose-700">
-                {decision.reasons.filter((reason) => reason.blocking).map((reason) => (
-                  <div key={reason.code}>{reason.message}</div>
-                ))}
-              </CardContent>
-            </Card>
-          )}
 
           {decision.canSubmitFeedback ? (
             <Card className="rounded-[1.75rem]">
               <CardHeader>
-                <CardTitle>Submit feedback</CardTitle>
-                <CardDescription>Feedback is tied to this release and can optionally attach the current device context.</CardDescription>
+                <CardTitle>Send feedback</CardTitle>
+                <CardDescription>Tell the builder what happened in this version.</CardDescription>
               </CardHeader>
-              <CardContent>
-                <FeedbackForm releaseId={release.id} />
-              </CardContent>
+              <CardContent><FeedbackForm releaseId={release.id} /></CardContent>
             </Card>
           ) : null}
 
@@ -143,15 +130,20 @@ export default async function TesterReleaseDetailPage({
           ) : null}
         </div>
 
-        <div className="space-y-6">
-          <AccessPolicySummary
-            title="Access requirements"
-            description="These requirements are evaluated on every page view and private download."
-            policy={release.accessPolicy}
-            reasons={decision.reasons}
-          />
-          <SeekerStatusCard verifiedSeeker={verifiedSeeker} />
+        <div className="min-w-0 space-y-6">
+          <div className="px-1">
+            <div className="section-eyebrow">Optional setup</div>
+            <h2 className="mt-2 text-xl font-semibold text-foreground">Account and device</h2>
+            <p className="mt-1 text-sm leading-6 text-muted-foreground">Only needed when this beta requires recovery, a wallet, or verified Seeker access.</p>
+          </div>
+          {session.user.isAnonymous ? (
+            <Card className="rounded-[1.75rem] border-brand/25 bg-brand/5">
+              <CardHeader><CardTitle>Keep this access</CardTitle><CardDescription>Add an email to recover this beta and your feedback on another device.</CardDescription></CardHeader>
+              <CardContent><Link href="/tester/upgrade" className={cn(buttonVariants(), "w-full justify-center sm:w-auto")}>Add recovery email</Link></CardContent>
+            </Card>
+          ) : null}
           <WalletLinkCard linkedWallets={user.wallets} />
+          <SeekerStatusCard verifiedSeeker={verifiedSeeker} />
         </div>
       </div>
     </DashboardFrame>

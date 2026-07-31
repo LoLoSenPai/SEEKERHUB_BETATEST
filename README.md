@@ -57,6 +57,14 @@ Required service variables:
 
 Production startup fails explicitly when any core service secret, email setting, invite key, rate-limit salt, admin allowlist, or cron secret is missing. `/api/health` then monitors live database, storage, email, cron, and invite-key readiness.
 
+### Transactional email deliverability
+
+- Send from a dedicated, verified Resend subdomain with SPF and DKIM enabled.
+- Publish DMARC on the organizational domain. Start with `p=none`, monitor delivery, then tighten the policy when all senders are aligned.
+- Prefer a same-domain reply address over a personal Gmail address. Omit replies until a monitored mailbox exists rather than pointing users to an unattended sender.
+- Use a custom application domain under the same organizational domain. Auth links from `app.example.com` sent by `mail.example.com` establish clearer brand alignment than links to a shared hosting domain.
+- New domains have no sending reputation. Keep volume gradual and ask internal recipients to mark early transactional messages as not spam; code cannot guarantee inbox placement.
+
 ## R2 Setup
 
 Keep the bucket private. The R2 token needs Object Read & Write only for the selected bucket. Configure bucket CORS for the production origin so browsers can use signed `PUT` URLs:

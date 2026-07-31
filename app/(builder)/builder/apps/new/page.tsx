@@ -8,7 +8,7 @@ import { createProjectAction } from "@/src/features/projects/actions";
 import { requireBuilderSession } from "@/src/lib/session";
 
 export default async function NewAppProjectPage() {
-  await requireBuilderSession();
+  const session = await requireBuilderSession();
 
   return (
     <DashboardFrame
@@ -16,6 +16,7 @@ export default async function NewAppProjectPage() {
       currentPath="/builder/apps/new"
       title="Create app project"
       subtitle="Model the Android app before the first beta release so every upload, tester group, invite, and metric has a stable home."
+      identityLabel={session.user.email}
     >
       <Card className="rounded-[1.75rem]">
         <CardHeader>

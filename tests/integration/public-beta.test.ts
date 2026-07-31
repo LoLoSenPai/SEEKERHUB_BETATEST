@@ -125,7 +125,6 @@ integrationDescribe("public beta database invariants", () => {
 
       const head = await headObject(storageKey);
       expect(head.ContentLength).toBe(body.byteLength);
-      expect(head.Metadata?.["expected-size"]).toBe(String(body.byteLength));
 
       await downloadObjectToFile(storageKey, filePath);
       expect(await readFile(filePath)).toEqual(body);
@@ -133,6 +132,27 @@ integrationDescribe("public beta database invariants", () => {
       await deleteObject(storageKey).catch(() => undefined);
       await unlink(filePath).catch(() => undefined);
       await rmdir(directory).catch(() => undefined);
+    }
+  });
+
+  it("rejects an object whose size differs from the signed upload reservation", async () => {
+    const storageKey = `integration/${runId}/wrong-size.bin`;
+    const reservedBody = Buffer.from("reserved-body");
+    const uploadUrl = await createSignedUploadUrl({
+      key: storageKey,
+      contentType: "application/octet-stream",
+      contentLength: reservedBody.byteLength,
+    });
+
+    try {
+      const upload = await fetch(uploadUrl, {
+        method: "PUT",
+        headers: { "content-type": "application/octet-stream" },
+        body: Buffer.concat([reservedBody, Buffer.from("x")]),
+      });
+      expect(upload.ok).toBe(false);
+    } finally {
+      await deleteObject(storageKey).catch(() => undefined);
     }
   });
 

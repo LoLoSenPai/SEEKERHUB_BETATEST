@@ -18,7 +18,8 @@ export const maxDuration = 300;
 async function inspectStoredUpload(storageKey: string, expectedSize: bigint) {
   const head = await headObject(storageKey);
   const storageSize = head.ContentLength == null ? null : BigInt(head.ContentLength);
-  if (storageSize !== expectedSize || head.Metadata?.["expected-size"] !== expectedSize.toString()) {
+  // R2 enforces the signed Content-Length but does not persist metadata hoisted into a presigned URL.
+  if (storageSize !== expectedSize) {
     throw new AppError("The stored object size does not match the reserved upload.", 400, "UPLOAD_SIZE_MISMATCH");
   }
 

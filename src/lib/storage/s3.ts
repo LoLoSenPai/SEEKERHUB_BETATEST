@@ -33,7 +33,6 @@ export async function createSignedUploadUrl({
       Key: key,
       ContentType: contentType,
       ContentLength: contentLength,
-      Metadata: { "expected-size": String(contentLength) },
     }),
     { expiresIn: 60 * 15 },
   );

@@ -11,6 +11,12 @@ function configuredValue(name: string, fallback?: string) {
   return fallback;
 }
 
+function configuredPublicValue(name: string, value: string | undefined, fallback: string) {
+  if (value?.trim()) return value;
+  if (process.env.NODE_ENV === "production") throw new Error(`${name} must be configured in production.`);
+  return fallback;
+}
+
 export function parseEnvBoolean(value: unknown, fallback: boolean) {
   if (value === undefined || value === null || value === "") return fallback;
   if (typeof value === "boolean") return value;
@@ -54,10 +60,16 @@ type ClientEnv = z.infer<typeof clientEnvSchema>;
 
 let serverEnvCache: ServerEnv | null = null;
 const clientEnvCache: ClientEnv = clientEnvSchema.parse({
-  NEXT_PUBLIC_APP_URL: configuredValue("NEXT_PUBLIC_APP_URL", DEFAULT_APP_URL),
-  NEXT_PUBLIC_SOLANA_RPC_URL: configuredValue(
+  // Next.js only exposes public variables to the browser when they are referenced statically.
+  NEXT_PUBLIC_APP_URL: configuredPublicValue(
+    "NEXT_PUBLIC_APP_URL",
+    process.env.NEXT_PUBLIC_APP_URL,
+    DEFAULT_APP_URL,
+  ),
+  NEXT_PUBLIC_SOLANA_RPC_URL: configuredPublicValue(
     "NEXT_PUBLIC_SOLANA_RPC_URL",
-    process.env.SOLANA_RPC_URL ?? DEFAULT_SOLANA_RPC_URL,
+    process.env.NEXT_PUBLIC_SOLANA_RPC_URL,
+    DEFAULT_SOLANA_RPC_URL,
   ),
 });
 

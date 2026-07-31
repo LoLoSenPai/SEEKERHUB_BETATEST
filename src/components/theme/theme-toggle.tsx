@@ -9,7 +9,7 @@ function subscribe() {
   return () => {};
 }
 
-export function ThemeToggle() {
+export function ThemeToggle({ className }: { className?: string }) {
   const isHydrated = useSyncExternalStore(subscribe, () => true, () => false);
   const { theme, toggleTheme } = useTheme();
   const isDark = theme === "dark";
@@ -24,8 +24,9 @@ export function ThemeToggle() {
       aria-label={isDark ? "Switch to light theme" : "Switch to dark theme"}
       onClick={toggleTheme}
       className={cn(
-        "fixed bottom-5 right-5 z-50 inline-flex h-12 items-center gap-2 rounded-full border px-4 shadow-[0_18px_45px_rgba(15,23,42,0.18)] backdrop-blur transition",
-        "border-border bg-surface text-foreground hover:translate-y-[-1px] hover:bg-card",
+        "inline-flex h-10 items-center gap-2 rounded-full border px-3 backdrop-blur transition",
+        "border-border bg-surface text-foreground hover:bg-card",
+        className,
       )}
     >
       {isDark ? <SunMedium className="size-4" /> : <MoonStar className="size-4" />}

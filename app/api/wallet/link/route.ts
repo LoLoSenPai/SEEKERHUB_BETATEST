@@ -4,13 +4,15 @@ import { auth } from "@/src/lib/auth";
 import { prisma } from "@/src/lib/db";
 import { verifySolanaSignature } from "@/src/lib/solana/wallet";
 import { walletLinkSchema } from "@/src/lib/validation";
+import { reconcilePendingInviteGrants } from "@/src/lib/invite-access";
+import { apiError, AppError } from "@/src/lib/errors";
 
 export async function POST(request: Request) {
   try {
     const session = await auth.api.getSession({ headers: request.headers });
 
     if (!session) {
-      return NextResponse.json({ error: "Authentication required." }, { status: 401 });
+      throw new AppError("Authentication required.", 401, "AUTH_REQUIRED");
     }
 
     const body = walletLinkSchema.parse(await request.json());
@@ -18,7 +20,7 @@ export async function POST(request: Request) {
       where: { id: body.challengeId },
     });
 
-    if (!challenge || challenge.userId !== session.user.id || challenge.address !== body.address) {
+    if (!challenge || challenge.userId !== session.user.id || challenge.address !== body.address || challenge.purpose !== "LINK") {
       return NextResponse.json({ error: "Wallet challenge not found." }, { status: 404 });
     }
 
@@ -41,15 +43,17 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Invalid wallet signature." }, { status: 400 });
     }
 
-    const existingWallet = await prisma.wallet.findUnique({
-      where: { address: body.address },
-    });
-
-    if (existingWallet && existingWallet.userId !== session.user.id) {
-      return NextResponse.json({ error: "This wallet is already linked to another user." }, { status: 409 });
-    }
-
     const wallet = await prisma.$transaction(async (tx) => {
+      const claimed = await tx.walletChallenge.updateMany({
+        where: { id: challenge.id, usedAt: null, expiresAt: { gt: new Date() } },
+        data: { usedAt: new Date() },
+      });
+      if (!claimed.count) throw new AppError("Wallet challenge already used or expired.", 409, "CHALLENGE_USED");
+
+      const existingWallet = await tx.wallet.findUnique({ where: { address: body.address } });
+      if (existingWallet && existingWallet.userId !== session.user.id) {
+        throw new AppError("This wallet is already linked to another user.", 409, "WALLET_ALREADY_LINKED");
+      }
       const linkedWallet = existingWallet
         ? await tx.wallet.update({
             where: { address: body.address },
@@ -66,24 +70,28 @@ export async function POST(request: Request) {
             },
           });
 
-      await tx.walletChallenge.update({
-        where: { id: challenge.id },
-        data: { usedAt: new Date() },
-      });
+      if (session.user.isAnonymous) {
+        await tx.user.update({ where: { id: session.user.id }, data: { isAnonymous: false } });
+        await tx.auditLog.create({
+          data: {
+            actorUserId: session.user.id,
+            action: "tester.account_upgraded_wallet",
+            targetType: "User",
+            targetId: session.user.id,
+          },
+        });
+      }
 
       return linkedWallet;
     });
+
+    await reconcilePendingInviteGrants(session.user.id);
 
     return NextResponse.json({
       id: wallet.id,
       address: wallet.address,
     });
   } catch (error) {
-    return NextResponse.json(
-      {
-        error: error instanceof Error ? error.message : "Unable to link wallet.",
-      },
-      { status: 400 },
-    );
+    return apiError(error, "Unable to link wallet.");
   }
 }

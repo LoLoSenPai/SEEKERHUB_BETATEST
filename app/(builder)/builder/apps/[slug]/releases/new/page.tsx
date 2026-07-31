@@ -2,11 +2,11 @@ import { notFound } from "next/navigation";
 import { DashboardFrame } from "@/src/components/layout/dashboard-frame";
 import { ReleaseUploadForm } from "@/src/features/releases/release-upload-form";
 import { getProjectForOwner } from "@/src/features/projects/queries";
-import { requireSession } from "@/src/lib/session";
+import { requireBuilderSession } from "@/src/lib/session";
 
 export default async function NewReleasePage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  const session = await requireSession();
+  const session = await requireBuilderSession();
   const project = await getProjectForOwner(slug, session.user.id);
 
   if (!project) {

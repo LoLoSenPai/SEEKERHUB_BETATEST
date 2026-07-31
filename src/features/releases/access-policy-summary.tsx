@@ -1,5 +1,6 @@
 import { Badge } from "@/src/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/src/components/ui/card";
+import type { AccessReason } from "@/src/lib/access";
 
 type AccessPolicySummaryProps = {
   title?: string;
@@ -16,7 +17,7 @@ type AccessPolicySummaryProps = {
       }
     | null
     | undefined;
-  reasons?: string[];
+  reasons?: AccessReason[];
 };
 
 function StatusBadge({ enabled, enabledLabel, disabledLabel }: { enabled: boolean; enabledLabel: string; disabledLabel: string }) {
@@ -51,7 +52,7 @@ export function AccessPolicySummary({
         <div className="flex flex-wrap gap-2">
           <StatusBadge enabled={policy.requireInviteAcceptance} enabledLabel="Invite required" disabledLabel="No invite required" />
           <StatusBadge enabled={policy.requireLinkedWallet} enabledLabel="Wallet required" disabledLabel="Wallet optional" />
-          <StatusBadge enabled={policy.requireSolanaMobile} enabledLabel="Solana Mobile required" disabledLabel="Any browser allowed" />
+          <StatusBadge enabled={policy.requireSolanaMobile} enabledLabel="Solana Mobile recommended" disabledLabel="Any device" />
           <StatusBadge enabled={policy.requireVerifiedSeeker} enabledLabel="Verified Seeker required" disabledLabel="Seeker optional" />
           <StatusBadge enabled={policy.allowPreviousReleases} enabledLabel="Previous builds visible" disabledLabel="Current build only" />
         </div>
@@ -70,12 +71,12 @@ export function AccessPolicySummary({
           </div>
         </div>
 
-        {reasons.length ? (
+        {reasons.some((reason) => reason.blocking) ? (
           <div className="rounded-[1.2rem] border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
             <div className="font-semibold">Current blockers</div>
             <div className="mt-2 grid gap-1">
-              {reasons.map((reason) => (
-                <div key={reason}>{reason}</div>
+              {reasons.filter((reason) => reason.blocking).map((reason) => (
+                <div key={reason.code}>{reason.message}</div>
               ))}
             </div>
           </div>

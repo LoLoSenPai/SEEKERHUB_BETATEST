@@ -29,6 +29,8 @@ export function ReleaseUploadForm({
   const [loading, setLoading] = useState(false);
   const [accessMode, setAccessMode] = useState("invite");
   const [walletAllowlist, setWalletAllowlist] = useState("");
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadStage, setUploadStage] = useState<"idle" | "reserving" | "uploading" | "validating">("idle");
   const groupChoices = useMemo(() => groups, [groups]);
   const accessSummary = useMemo(() => {
     if (accessMode === "group") {
@@ -58,7 +60,10 @@ export function ReleaseUploadForm({
             event.preventDefault();
             setError(null);
             setLoading(true);
+            setUploadStage("reserving");
+            setUploadProgress(0);
 
+            try {
             const form = event.currentTarget;
             const formData = new FormData(form);
             const file = formData.get("apk") as File | null;
@@ -80,8 +85,8 @@ export function ReleaseUploadForm({
 
             const draft = {
               projectId,
-              versionName: String(formData.get("versionName") ?? ""),
-              versionCode: Number(formData.get("versionCode") ?? 0),
+              versionName: "manifest-source-of-truth",
+              versionCode: 1,
               changelog: String(formData.get("changelog") ?? ""),
               accessPolicy: {
                 requireInviteAcceptance: selectedAccessMode !== "wallet-only",
@@ -123,20 +128,21 @@ export function ReleaseUploadForm({
               sessionId: string;
             };
 
-            const uploadResponse = await fetch(uploadUrl, {
-              method: "PUT",
-              headers: {
-                "content-type": file.type || "application/vnd.android.package-archive",
-              },
-              body: file,
+            setUploadStage("uploading");
+            await new Promise<void>((resolve, reject) => {
+              const xhr = new XMLHttpRequest();
+              xhr.open("PUT", uploadUrl);
+              xhr.setRequestHeader("content-type", file.type || "application/vnd.android.package-archive");
+              xhr.setRequestHeader("x-amz-meta-expected-size", String(file.size));
+              xhr.upload.onprogress = (progressEvent) => {
+                if (progressEvent.lengthComputable) setUploadProgress(Math.round((progressEvent.loaded / progressEvent.total) * 100));
+              };
+              xhr.onload = () => xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new Error("R2 rejected the APK upload."));
+              xhr.onerror = () => reject(new Error("The APK upload was interrupted."));
+              xhr.send(file);
             });
 
-            if (!uploadResponse.ok) {
-              setError("Upload failed before release finalization.");
-              setLoading(false);
-              return;
-            }
-
+            setUploadStage("validating");
             const finalizeResponse = await fetch(`/api/uploads/releases/${sessionId}/finalize`, {
               method: "POST",
             });
@@ -151,28 +157,27 @@ export function ReleaseUploadForm({
 
             router.push(`/builder/apps/${projectSlug}/releases/${finalizePayload.releaseId}`);
             router.refresh();
-          }}
+          } catch (caught) {
+            setError(caught instanceof Error ? caught.message : "Release upload failed.");
+          } finally {
+            setLoading(false);
+          }}}
         >
-          <div className="grid gap-5 lg:grid-cols-2">
-            <div className="grid gap-2">
-              <Label htmlFor="versionName">Version name</Label>
-              <Input id="versionName" name="versionName" placeholder="0.8.3" required />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="versionCode">Version code</Label>
-              <Input id="versionCode" name="versionCode" type="number" min={1} placeholder="83" required />
-            </div>
+          <div className="rounded-[1.5rem] border border-border bg-muted/60 p-5">
+            <div className="section-eyebrow">1 - APK</div>
+            <div className="mt-2 text-sm leading-6 text-muted-foreground">Select one signed release APK. Package, version name, version code, min SDK, and target SDK are read from AndroidManifest.xml and override manual input.</div>
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="changelog">Changelog</Label>
+            <Label htmlFor="changelog">2 - Release notes</Label>
             <Textarea id="changelog" name="changelog" placeholder="What changed in this release?" required />
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="apk">Signed APK</Label>
+            <Label htmlFor="apk">Signed APK (max 250 MiB)</Label>
             <Input id="apk" name="apk" type="file" accept=".apk,application/vnd.android.package-archive,application/octet-stream" required />
           </div>
 
           <div className="grid gap-5 rounded-[1.5rem] border border-border bg-muted/60 p-5 lg:grid-cols-2">
+            <div className="section-eyebrow lg:col-span-2">3 - Audience</div>
             <div className="grid gap-4">
               <div className="grid gap-2">
                 <Label htmlFor="accessMode">Visibility preset</Label>
@@ -213,7 +218,7 @@ export function ReleaseUploadForm({
             </label>
             <label className="flex items-center gap-3 text-sm text-foreground">
               <input type="checkbox" name="requireSolanaMobile" className="size-4 rounded border-input" />
-              Require Solana Mobile capable device
+              Recommend a Solana Mobile capable device
             </label>
             <label className="flex items-center gap-3 text-sm text-foreground">
               <input type="checkbox" name="requireVerifiedSeeker" className="size-4 rounded border-input" />
@@ -225,11 +230,14 @@ export function ReleaseUploadForm({
             </label>
           </div>
 
-          {error ? <div className="rounded-2xl bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</div> : null}
+          <div aria-live="polite">
+            {loading ? <div className="grid gap-2 rounded-2xl border border-border bg-muted/50 p-4"><div className="flex items-center justify-between text-sm"><span>{uploadStage === "reserving" ? "Reserving private storage" : uploadStage === "uploading" ? "Uploading APK to R2" : "Validating archive and Android manifest"}</span><span>{uploadStage === "uploading" ? `${uploadProgress}%` : ""}</span></div><div className="h-2 overflow-hidden rounded-full bg-card"><div className="h-full bg-brand transition-[width]" style={{ width: uploadStage === "uploading" ? `${uploadProgress}%` : uploadStage === "validating" ? "100%" : "8%" }} /></div></div> : null}
+            {error ? <div className="rounded-2xl bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</div> : null}
+          </div>
 
           <Button type="submit" size="lg" disabled={loading}>
             {loading ? <Loader2 className="size-4 animate-spin" /> : <UploadCloud className="size-4" />}
-            {loading ? "Uploading..." : "Upload and finalize release"}
+            {loading ? "Publishing release..." : "4 - Confirm and publish release"}
           </Button>
         </form>
       </CardContent>

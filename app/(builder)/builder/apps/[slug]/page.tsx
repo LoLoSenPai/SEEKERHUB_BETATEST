@@ -10,7 +10,7 @@ import { PendingSubmitButton } from "@/src/components/ui/pending-submit-button";
 import { Textarea } from "@/src/components/ui/textarea";
 import { getProjectForOwner } from "@/src/features/projects/queries";
 import { deleteProjectAction, updateProjectAction } from "@/src/features/projects/actions";
-import { requireSession } from "@/src/lib/session";
+import { requireBuilderSession } from "@/src/lib/session";
 import { compactChecksum, formatBytes } from "@/src/lib/utils";
 
 export default async function BuilderProjectPage({
@@ -22,7 +22,7 @@ export default async function BuilderProjectPage({
 }) {
   const { slug } = await params;
   const resolvedSearchParams = searchParams ? await searchParams : undefined;
-  const session = await requireSession();
+  const session = await requireBuilderSession();
   const project = await getProjectForOwner(slug, session.user.id);
 
   if (!project) {
@@ -63,14 +63,14 @@ export default async function BuilderProjectPage({
             <CardHeader>
               <CardTitle>Danger zone</CardTitle>
               <CardDescription>
-                Delete this project and all related releases, invite links, tester memberships, and feedback records.
+                Move this project and its releases to the seven-day trash. Tester access stops immediately.
               </CardDescription>
             </CardHeader>
             <CardContent>
               <form action={deleteProjectAction} className="grid gap-5">
                 <input type="hidden" name="projectId" value={project.id} />
                 <div className="rounded-[1.25rem] border border-danger/20 bg-danger/5 px-4 py-3 text-sm text-muted-foreground">
-                  This action is irreversible. Type <span className="font-semibold text-foreground">{project.name}</span> to confirm.
+                  Type <span className="font-semibold text-foreground">{project.name}</span> to confirm. Storage still counts against quota until purge.
                 </div>
                 {resolvedSearchParams?.deleteError === "confirmation" ? (
                   <div className="rounded-[1.25rem] border border-danger/20 bg-danger/5 px-4 py-3 text-sm text-danger">
@@ -83,8 +83,8 @@ export default async function BuilderProjectPage({
                 </div>
                 <PendingSubmitButton
                   variant="danger"
-                  idleLabel="Delete project"
-                  pendingLabel="Deleting project..."
+                  idleLabel="Move project to trash"
+                  pendingLabel="Moving to trash..."
                 />
               </form>
             </CardContent>
@@ -102,6 +102,7 @@ export default async function BuilderProjectPage({
             </Link>
           </CardHeader>
           <CardContent className="grid gap-4 sm:grid-cols-2">
+            {project.androidPackageName ? <div className="sm:col-span-2 rounded-[1.2rem] border border-border bg-muted/50 p-4 text-sm"><span className="font-semibold">Bound Android package:</span> <span className="font-mono">{project.androidPackageName}</span></div> : null}
             <Link href={`/builder/apps/${project.slug}/groups`} className="rounded-[1.4rem] border border-border bg-card p-5 transition hover:bg-muted/60">
               <div className="font-semibold">Tester groups</div>
               <div className="mt-2 text-sm text-muted-foreground">{project.testerGroups.length} groups configured</div>

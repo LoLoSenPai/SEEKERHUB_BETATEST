@@ -1,208 +1,117 @@
 import { Prisma } from "@prisma/client";
-import type { AccessPolicy, DeviceProfile, TesterMembership, Wallet } from "@prisma/client";
 import { prisma } from "@/src/lib/db";
 
-type InviteClaimWithLink = {
-  id: string;
-  createdAt: Date;
-  grantedAt: Date | null;
-  inviteLink: {
-    id: string;
-    projectId: string;
-    releaseId: string | null;
-    maxUses: number | null;
-  };
-};
-
-type ResolveInviteAcceptanceInput = {
-  userId: string;
-  policy: AccessPolicy & {
+function walletMeetsPolicy(
+  policy: {
+    requireLinkedWallet: boolean;
+    requireVerifiedSeeker: boolean;
     walletEntries: { address: string }[];
-  };
-  testerMemberships: TesterMembership[];
-  inviteClaims: InviteClaimWithLink[];
-  wallets: Wallet[];
-  deviceProfile: DeviceProfile | null;
-  releaseId: string;
-  projectId: string;
-};
-
-function claimMatchesRelease(claim: InviteClaimWithLink, projectId: string, releaseId: string) {
-  return (
-    claim.inviteLink.projectId === projectId &&
-    (claim.inviteLink.releaseId === null || claim.inviteLink.releaseId === releaseId)
-  );
-}
-
-function meetsPostInviteRequirements(input: Omit<ResolveInviteAcceptanceInput, "userId" | "inviteClaims">) {
-  const { policy, testerMemberships, wallets, deviceProfile } = input;
-
-  if (policy.testerGroupId) {
-    const inGroup = testerMemberships.some((membership) => membership.testerGroupId === policy.testerGroupId);
-    if (!inGroup) {
-      return false;
-    }
-  }
-
-  if (policy.requireLinkedWallet) {
-    if (!wallets.length) {
-      return false;
-    }
-
-    if (policy.walletEntries.length > 0) {
-      const allowed = wallets.some((wallet) =>
-        policy.walletEntries.some((entry) => entry.address.toLowerCase() === wallet.address.toLowerCase()),
-      );
-
-      if (!allowed) {
-        return false;
-      }
-    }
-  }
-
-  if (policy.requireSolanaMobile && !deviceProfile?.isSolanaMobileCapable) {
+  },
+  wallets: Array<{
+    address: string;
+    seekerGenesisVerificationExpiresAt: Date | null;
+  }>,
+  now: Date,
+) {
+  if (policy.requireLinkedWallet && wallets.length === 0) return false;
+  if (policy.walletEntries.length > 0 && !wallets.some((wallet) => policy.walletEntries.some((entry) => entry.address === wallet.address))) {
     return false;
   }
-
-  if (policy.requireVerifiedSeeker) {
-    const verifiedSeekerWallet = wallets.some((wallet) => Boolean(wallet.seekerGenesisVerifiedAt));
-    if (!verifiedSeekerWallet) {
-      return false;
-    }
+  if (
+    policy.requireVerifiedSeeker &&
+    !wallets.some((wallet) => wallet.seekerGenesisVerificationExpiresAt && wallet.seekerGenesisVerificationExpiresAt > now)
+  ) {
+    return false;
   }
-
   return true;
 }
 
-async function tryGrantInviteSeat(claim: InviteClaimWithLink) {
-  if (!claim.inviteLink.maxUses) {
-    return null;
-  }
+export async function reconcilePendingInviteGrants(userId: string, projectId?: string) {
+  const now = new Date();
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    include: {
+      wallets: true,
+      testerAccesses: true,
+      testerMemberships: { where: { revokedAt: null } },
+      inviteClaims: {
+        where: { grantedAt: null, revokedAt: null },
+        include: { inviteLink: true },
+      },
+    },
+  });
+  if (!user) return;
 
-  for (let attempt = 0; attempt < 2; attempt += 1) {
-    try {
-      const grantedAt = new Date();
+  for (const claim of user.inviteClaims) {
+    const invite = claim.inviteLink;
+    if (projectId && invite.projectId !== projectId) continue;
+    if (user.testerAccesses.some((access) => access.projectId === invite.projectId && access.revokedAt)) continue;
+    const releases = await prisma.release.findMany({
+      where: {
+        projectId: invite.projectId,
+        id: invite.releaseId ?? undefined,
+        status: "PUBLISHED",
+        deletedAt: null,
+      },
+      include: { accessPolicy: { include: { walletEntries: true } } },
+    });
 
-      const granted = await prisma.$transaction(
-        async (tx) => {
-          const freshClaim = await tx.inviteClaim.findUnique({
-            where: { id: claim.id },
-            include: {
-              inviteLink: true,
-            },
-          });
+    const eligible = releases.some((release) => {
+      const policy = release.accessPolicy;
+      if (!policy) return false;
+      const inRequiredGroup =
+        !policy.testerGroupId ||
+        invite.testerGroupId === policy.testerGroupId ||
+        user.testerMemberships.some((membership) => membership.testerGroupId === policy.testerGroupId);
+      return inRequiredGroup && walletMeetsPolicy(policy, user.wallets, now);
+    });
+    if (!eligible) continue;
 
-          if (!freshClaim?.inviteLink.maxUses) {
-            return null;
-          }
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        await prisma.$transaction(
+          async (tx) => {
+            const fresh = await tx.inviteClaim.findUnique({ where: { id: claim.id }, include: { inviteLink: true } });
+            if (!fresh || fresh.grantedAt || fresh.revokedAt) return;
 
-          if (freshClaim.grantedAt) {
-            return freshClaim.grantedAt;
-          }
+            if (fresh.inviteLink.maxUses) {
+              const occupied = await tx.inviteClaim.count({
+                where: { inviteLinkId: fresh.inviteLinkId, grantedAt: { not: null } },
+              });
+              if (occupied >= fresh.inviteLink.maxUses) return;
+            }
 
-          const grantedCount = await tx.inviteClaim.count({
-            where: {
-              inviteLinkId: freshClaim.inviteLinkId,
-              grantedAt: {
-                not: null,
-              },
-            },
-          });
-
-          if (grantedCount >= freshClaim.inviteLink.maxUses) {
-            return false;
-          }
-
-          await tx.inviteClaim.update({
-            where: { id: freshClaim.id },
-            data: { grantedAt },
-          });
-
-          return grantedAt;
-        },
-        {
-          isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
-        },
-      );
-
-      return granted;
-    } catch (error) {
-      if (
-        error instanceof Prisma.PrismaClientKnownRequestError &&
-        attempt === 0 &&
-        ["P2034", "P2028"].includes(error.code)
-      ) {
-        continue;
+            await tx.inviteClaim.update({ where: { id: fresh.id }, data: { grantedAt: new Date() } });
+            if (fresh.inviteLink.testerGroupId) {
+              const membership = await tx.testerMembership.findFirst({
+                where: {
+                  projectId: fresh.inviteLink.projectId,
+                  testerGroupId: fresh.inviteLink.testerGroupId,
+                  userId,
+                },
+              });
+              if (membership) {
+                await tx.testerMembership.update({ where: { id: membership.id }, data: { revokedAt: null } });
+              } else {
+                await tx.testerMembership.create({
+                  data: {
+                    projectId: fresh.inviteLink.projectId,
+                    testerGroupId: fresh.inviteLink.testerGroupId,
+                    userId,
+                    source: "INVITE_LINK",
+                    inviteLinkId: fresh.inviteLink.id,
+                  },
+                });
+              }
+            }
+          },
+          { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+        );
+        break;
+      } catch (error) {
+        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2034" && attempt === 0) continue;
+        throw error;
       }
-
-      throw error;
     }
   }
-
-  return false;
-}
-
-export async function resolveInviteAcceptanceForRelease<TInviteClaim extends InviteClaimWithLink>(
-  input: Omit<ResolveInviteAcceptanceInput, "inviteClaims"> & {
-    inviteClaims: TInviteClaim[];
-  },
-) {
-  const { policy, inviteClaims, projectId, releaseId } = input;
-
-  if (!policy.requireInviteAcceptance) {
-    return {
-      inviteClaims,
-      inviteCapacityReason: null as string | null,
-    };
-  }
-
-  const matchingClaims = inviteClaims
-    .filter((claim) => claimMatchesRelease(claim, projectId, releaseId))
-    .sort((left, right) => left.createdAt.getTime() - right.createdAt.getTime());
-
-  const hasAcceptedInvite = matchingClaims.some((claim) => !claim.inviteLink.maxUses || Boolean(claim.grantedAt));
-
-  if (hasAcceptedInvite || matchingClaims.length === 0) {
-    return {
-      inviteClaims,
-      inviteCapacityReason: null as string | null,
-    };
-  }
-
-  if (!meetsPostInviteRequirements(input)) {
-    return {
-      inviteClaims,
-      inviteCapacityReason: null as string | null,
-    };
-  }
-
-  for (const claim of matchingClaims) {
-    const grantedAt = await tryGrantInviteSeat(claim);
-
-    if (grantedAt instanceof Date) {
-      return {
-        inviteClaims: inviteClaims.map((candidate) =>
-          candidate.id === claim.id
-            ? {
-                ...candidate,
-                grantedAt,
-              } satisfies TInviteClaim
-            : candidate,
-        ),
-        inviteCapacityReason: null as string | null,
-      };
-    }
-
-    if (grantedAt === null) {
-      return {
-        inviteClaims,
-        inviteCapacityReason: null as string | null,
-      };
-    }
-  }
-
-  return {
-    inviteClaims,
-    inviteCapacityReason: "This invite has already been granted to the maximum number of eligible testers.",
-  };
 }

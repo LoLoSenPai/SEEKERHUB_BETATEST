@@ -6,6 +6,7 @@ describe("invite helpers", () => {
     const token = createInviteToken();
     const encrypted = encryptInviteToken(token);
 
+    expect(encrypted.startsWith("v2.")).toBe(true);
     expect(encrypted).not.toBe(token);
     expect(decryptInviteToken(encrypted)).toBe(token);
   });

@@ -1,7 +1,7 @@
 "use client";
 
 import { createAuthClient } from "better-auth/react";
-import { anonymousClient } from "better-auth/client/plugins";
+import { anonymousClient, magicLinkClient } from "better-auth/client/plugins";
 import { getClientEnv } from "@/src/lib/env";
 
 const env = getClientEnv();
@@ -9,5 +9,5 @@ const browserOrigin = typeof window !== "undefined" ? window.location.origin : e
 
 export const authClient = createAuthClient({
   baseURL: browserOrigin,
-  plugins: [anonymousClient()],
+  plugins: [anonymousClient(), magicLinkClient()],
 });

@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { auth } from "@/src/lib/auth";
 import { prisma } from "@/src/lib/db";
 import { deviceContextInputSchema } from "@/src/lib/validation";
+import { detectDeviceContextFromUserAgent } from "@/src/lib/device/detect";
+import { apiError } from "@/src/lib/errors";
 
 export async function POST(request: Request) {
   try {
@@ -12,31 +14,31 @@ export async function POST(request: Request) {
     }
 
     const body = deviceContextInputSchema.parse(await request.json());
+    const derived = detectDeviceContextFromUserAgent({
+      userAgent: request.headers.get("user-agent") ?? "",
+      platformLabel: body.platformLabel,
+    });
 
     const profile = await prisma.deviceProfile.create({
       data: {
         userId: session.user.id,
-        browserName: body.browserName,
-        browserVersion: body.browserVersion,
-        osName: body.osName,
-        osVersion: body.osVersion,
-        deviceClass: body.deviceClass,
-        platformLabel: body.platformLabel,
-        isSeeker: body.isSeeker,
-        isSolanaMobileCapable: body.isSolanaMobileCapable,
-        hasMobileWalletAdapterContext: body.hasMobileWalletAdapterContext,
-        recognitionSource: body.recognitionSource,
+        browserName: derived.browserName,
+        browserVersion: undefined,
+        osName: derived.osName,
+        osVersion: undefined,
+        deviceClass: derived.deviceClass,
+        platformLabel: derived.platformLabel,
+        isSeeker: derived.isSeeker,
+        isSolanaMobileCapable: derived.isSolanaMobileCapable,
+        hasMobileWalletAdapterContext:
+          derived.hasMobileWalletAdapterContext && body.hasMobileWalletAdapterContext,
+        recognitionSource: derived.recognitionSource,
       },
       select: { id: true },
     });
 
     return NextResponse.json(profile);
   } catch (error) {
-    return NextResponse.json(
-      {
-        error: error instanceof Error ? error.message : "Unable to persist device profile.",
-      },
-      { status: 400 },
-    );
+    return apiError(error, "Unable to persist device profile.");
   }
 }

@@ -3,6 +3,7 @@ import { auth } from "@/src/lib/auth";
 import { prisma } from "@/src/lib/db";
 import { createSignedDownloadUrl } from "@/src/lib/storage/s3";
 import { getTesterRelease } from "@/src/features/projects/queries";
+import { apiError } from "@/src/lib/errors";
 
 export async function GET(request: Request, { params }: { params: Promise<{ releaseId: string }> }) {
   const { releaseId } = await params;
@@ -17,8 +18,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ rele
     const ownedRelease = await prisma.release.findFirst({
       where: {
         id: releaseId,
+        deletedAt: null,
         project: {
           ownerId: session.user.id,
+          deletedAt: null,
         },
       },
       include: {
@@ -27,7 +30,11 @@ export async function GET(request: Request, { params }: { params: Promise<{ rele
     });
 
     if (ownedRelease?.buildAsset) {
-      const url = await createSignedDownloadUrl(ownedRelease.buildAsset.storageKey);
+      const builderProfile = await prisma.builderProfile.findUnique({ where: { userId: session.user.id } });
+      if (session.user.isAnonymous || !session.user.emailVerified || builderProfile?.status !== "ACTIVE") {
+        return NextResponse.json({ error: "An active builder account is required." }, { status: 403 });
+      }
+      const url = await createSignedDownloadUrl(ownedRelease.buildAsset.storageKey, ownedRelease.buildAsset.originalFileName);
       return NextResponse.redirect(url);
     }
 
@@ -45,14 +52,12 @@ export async function GET(request: Request, { params }: { params: Promise<{ rele
       },
     });
 
-    const url = await createSignedDownloadUrl(testerRelease.release.buildAsset.storageKey);
+    const url = await createSignedDownloadUrl(
+      testerRelease.release.buildAsset.storageKey,
+      testerRelease.release.buildAsset.originalFileName,
+    );
     return NextResponse.redirect(url);
   } catch (error) {
-    return NextResponse.json(
-      {
-        error: error instanceof Error ? error.message : "Unable to generate download link.",
-      },
-      { status: 400 },
-    );
+    return apiError(error, "Unable to generate download link.");
   }
 }

@@ -1,4 +1,17 @@
 import { z } from "zod";
+import { PublicKey } from "@solana/web3.js";
+
+const MAX_APK_BYTES = 250 * 1024 * 1024;
+
+function isSolanaAddress(value: string) {
+  try {
+    return new PublicKey(value).toBase58() === value;
+  } catch {
+    return false;
+  }
+}
+
+export const solanaAddressSchema = z.string().trim().refine(isSolanaAddress, "Invalid Solana address.");
 
 function normalizeOptionalDateTimeInput(value: unknown) {
   if (typeof value !== "string") {
@@ -32,7 +45,14 @@ export const accessPolicyInputSchema = z.object({
   requireSolanaMobile: z.boolean().default(false),
   requireVerifiedSeeker: z.boolean().default(false),
   allowPreviousReleases: z.boolean().default(false),
-  walletAllowlist: z.array(z.string().trim().min(32).max(64)).default([]),
+  walletAllowlist: z.array(solanaAddressSchema).max(1_000).default([]),
+}).transform((policy) => {
+  const walletAllowlist = [...new Set(policy.walletAllowlist)];
+  return {
+    ...policy,
+    walletAllowlist,
+    requireLinkedWallet: policy.requireLinkedWallet || walletAllowlist.length > 0 || policy.requireVerifiedSeeker,
+  };
 });
 
 export const releaseDraftInputSchema = z.object({
@@ -63,7 +83,7 @@ export const feedbackInputSchema = z.object({
       isSeeker: z.boolean(),
       isSolanaMobileCapable: z.boolean(),
       hasMobileWalletAdapterContext: z.boolean(),
-      recognitionSource: z.enum(["NONE", "USER_AGENT", "WALLET_CONTEXT", "VERIFIED_WALLET_SGT"]),
+      recognitionSource: z.enum(["NONE", "USER_AGENT", "WALLET_CONTEXT"]),
       browserName: z.string().optional(),
       browserVersion: z.string().optional(),
       osName: z.string().optional(),
@@ -84,14 +104,14 @@ export const deviceContextInputSchema = z.object({
   isSeeker: z.boolean(),
   isSolanaMobileCapable: z.boolean(),
   hasMobileWalletAdapterContext: z.boolean(),
-  recognitionSource: z.enum(["NONE", "USER_AGENT", "WALLET_CONTEXT", "VERIFIED_WALLET_SGT"]),
+  recognitionSource: z.enum(["NONE", "USER_AGENT", "WALLET_CONTEXT"]),
 });
 
 export const createUploadSessionSchema = z.object({
   projectId: z.string().cuid(),
   fileName: z.string().min(1),
   contentType: z.string().min(1),
-  fileSize: z.coerce.number().int().positive().optional(),
+  fileSize: z.coerce.number().int().positive().max(MAX_APK_BYTES),
   draft: releaseDraftInputSchema,
 });
 
@@ -104,15 +124,14 @@ export const claimInviteSchema = z.object({
 });
 
 export const walletChallengeSchema = z.object({
-  address: z.string().trim().min(32).max(64),
+  address: solanaAddressSchema,
+  purpose: z.enum(["LINK", "VERIFY_SGT", "SIGN_IN"]).default("LINK"),
 });
 
 export const walletLinkSchema = z.object({
   challengeId: z.string().cuid(),
-  address: z.string().trim().min(32).max(64),
+  address: solanaAddressSchema,
   signature: z.string().min(40),
 });
 
-export const verifySeekerSchema = z.object({
-  walletId: z.string().cuid(),
-});
+export const verifySeekerSchema = walletLinkSchema;

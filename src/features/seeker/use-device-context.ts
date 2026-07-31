@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { detectDeviceContextFromUserAgent } from "@/src/lib/device/detect";
 import type { DeviceContext } from "@/src/lib/device/types";
 
@@ -8,32 +8,46 @@ type DeviceProfileResponse = {
   id: string;
 };
 
-export function useDeviceContext(verifiedSeeker = false) {
-  const [deviceProfileId, setDeviceProfileId] = useState<string | null>(() => {
-    if (typeof window === "undefined") {
-      return null;
-    }
+const UNKNOWN_DEVICE_CONTEXT: DeviceContext = {
+  deviceClass: "UNKNOWN",
+  isSeeker: false,
+  isSolanaMobileCapable: false,
+  hasMobileWalletAdapterContext: false,
+  recognitionSource: "NONE",
+};
 
+let cachedDeviceKey = "";
+let cachedDeviceContext = UNKNOWN_DEVICE_CONTEXT;
+
+function subscribe() {
+  return () => {};
+}
+
+function getStoredDeviceProfileId() {
+  try {
     return sessionStorage.getItem("seekerhub-device-profile-id");
-  });
+  } catch {
+    return null;
+  }
+}
 
-  const context = useMemo<DeviceContext>(() => {
-    if (typeof navigator === "undefined") {
-      return {
-        deviceClass: "UNKNOWN",
-        isSeeker: false,
-        isSolanaMobileCapable: false,
-        hasMobileWalletAdapterContext: false,
-        recognitionSource: "NONE",
-      };
-    }
-
-    return detectDeviceContextFromUserAgent({
+function getBrowserDeviceContext() {
+  const key = `${navigator.userAgent}\n${navigator.platform}`;
+  if (key !== cachedDeviceKey) {
+    cachedDeviceKey = key;
+    cachedDeviceContext = detectDeviceContextFromUserAgent({
       userAgent: navigator.userAgent,
       platformLabel: navigator.platform,
-      verifiedSeeker,
     });
-  }, [verifiedSeeker]);
+  }
+  return cachedDeviceContext;
+}
+
+export function useDeviceContext() {
+  const storedDeviceProfileId = useSyncExternalStore(subscribe, getStoredDeviceProfileId, () => null);
+  const context = useSyncExternalStore(subscribe, getBrowserDeviceContext, () => UNKNOWN_DEVICE_CONTEXT);
+  const [persistedDeviceProfileId, setPersistedDeviceProfileId] = useState<string | null>(null);
+  const deviceProfileId = persistedDeviceProfileId ?? storedDeviceProfileId;
 
   async function persistDeviceProfile() {
     if (deviceProfileId) return deviceProfileId;
@@ -50,7 +64,7 @@ export function useDeviceContext(verifiedSeeker = false) {
 
     const data = (await response.json()) as DeviceProfileResponse;
     sessionStorage.setItem("seekerhub-device-profile-id", data.id);
-    setDeviceProfileId(data.id);
+    setPersistedDeviceProfileId(data.id);
     return data.id;
   }
 

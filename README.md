@@ -1,303 +1,153 @@
-# SeekerHub MVP
+# SeekerHub Public Beta
 
-SeekerHub is a web-first private beta distribution platform for Android builders shipping to Solana Seeker and Android users before official store publication.
-
-It covers:
-
-- builder authentication
-- app/project creation
-- signed APK release uploads
-- private invite links
-- tester groups and wallet-aware access
-- tester dashboard and private downloads
-- feedback per release
-- simple release analytics
-- Seeker-aware device context from day one
+SeekerHub is a web-first private Android beta distribution service for Solana Mobile builders. Builders upload signed APKs to private object storage, publish policy-gated releases, invite testers, and collect release-specific feedback. It is not an app store and it does not claim to cryptographically certify APK signatures.
 
 ## Stack
 
-- Next.js 16 App Router
-- TypeScript
-- Tailwind CSS v4
-- Better Auth
-- Prisma
-- PostgreSQL
-- S3-compatible private object storage
-- Solana wallet adapter for web/mobile wallet flows
+- Next.js 16 App Router, React 19, TypeScript, Tailwind CSS 4
+- Better Auth with email/password, verification, password reset, anonymous guests, magic links, and wallet recovery
+- Prisma 6 with PostgreSQL (Neon in production)
+- S3-compatible private storage (Cloudflare R2 in production, MinIO locally)
+- Resend for transactional email
+- Solana Mobile Wallet Adapter and server-side Seeker Genesis Token verification
 
-## Setup
+Node.js 24 is required. The repository and Vercel project must use the same major version.
 
-1. Install dependencies:
+## Local Setup
+
+1. Install dependencies and create the local environment file.
 
 ```bash
 npm install
-```
-
-2. Copy the environment template:
-
-```bash
 cp .env.example .env
 ```
 
-3. Start local infrastructure:
+2. Start PostgreSQL and MinIO. The bootstrap container creates the private `seekerhub-builds` bucket.
 
 ```bash
 docker compose up -d
 ```
 
-4. Generate Prisma client and push the schema:
+3. Apply versioned migrations to the local database and start Next.js.
 
 ```bash
 npm run db:generate
-npm run db:push
-```
-
-5. Start the app:
-
-```bash
+npm run db:migrate
 npm run dev
 ```
 
-The default local app URL is `http://localhost:3000`.
+Use one canonical local origin, normally `http://127.0.0.1:3000`, for `BETTER_AUTH_URL`, `NEXT_PUBLIC_APP_URL`, and the browser URL.
 
-## Environment Variables
+## Environment
 
-`DATABASE_URL`
-PostgreSQL connection string used by Prisma and Better Auth.
+Required service variables:
 
-`BETTER_AUTH_SECRET`
-Secret used to sign auth cookies and tokens.
+- `DATABASE_URL`: pooled PostgreSQL URL used by the application.
+- `DIRECT_DATABASE_URL`: direct PostgreSQL URL used by Prisma migrations.
+- `BETTER_AUTH_SECRET`: independent auth secret of at least 32 characters.
+- `BETTER_AUTH_URL`, `NEXT_PUBLIC_APP_URL`: identical canonical application origins.
+- `INVITE_ENCRYPTION_KEY`: independent key used for reusable invite URLs. Do not derive it from the auth secret.
+- `RATE_LIMIT_SALT`: secret salt used before IP-derived rate-limit keys are stored.
+- `ADMIN_EMAILS`: comma-separated emergency/admin allowlist. The migrated original owner is also bootstrapped as admin.
+- `CRON_SECRET`: Vercel Cron bearer secret.
+- `RESEND_API_KEY`, `EMAIL_FROM`, `EMAIL_REPLY_TO`: verified Resend sender configuration.
+- `S3_ENDPOINT`, `S3_REGION`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_FORCE_PATH_STYLE`.
+- `SOLANA_RPC_URL`: server RPC used for Token-2022 SGT verification.
+- `NEXT_PUBLIC_SOLANA_RPC_URL`: browser RPC used by wallet adapters.
 
-`BETTER_AUTH_URL`
-Canonical server URL for Better Auth.
+Production startup fails explicitly when any core service secret, email setting, invite key, rate-limit salt, admin allowlist, or cron secret is missing. `/api/health` then monitors live database, storage, email, cron, and invite-key readiness.
 
-`NEXT_PUBLIC_APP_URL`
-Public app URL used by the wallet layer and generated invite links.
+## R2 Setup
 
-`S3_ENDPOINT`
-S3-compatible endpoint. For local MinIO: `http://127.0.0.1:9000`.
+Keep the bucket private. The R2 token needs Object Read & Write only for the selected bucket. Configure bucket CORS for the production origin so browsers can use signed `PUT` URLs:
 
-`S3_REGION`
-Storage region. Local MinIO can still use `us-east-1`.
-
-`S3_BUCKET`
-Private bucket name for APK assets.
-
-`S3_ACCESS_KEY_ID`
-Access key for object storage.
-
-`S3_SECRET_ACCESS_KEY`
-Secret key for object storage.
-
-`S3_FORCE_PATH_STYLE`
-Use `true` for MinIO and many local S3-compatible targets.
-
-`SOLANA_RPC_URL`
-Server-side Solana RPC endpoint used for wallet verification and optional Seeker Genesis Token verification.
-
-`NEXT_PUBLIC_SOLANA_RPC_URL`
-Client-side RPC endpoint used by the wallet adapter.
-
-`HELIUS_API_KEY`
-Optional. Reserved for future Helius-based enhancements. The MVP Seeker verification path works with standard RPC.
-
-## Database Setup
-
-Prisma schema lives in [prisma/schema.prisma](/e:/CODE/PERSO/SEEKERHUB_BETATEST/prisma/schema.prisma).
-
-Core domain models:
-
-- `User`, `Session`, `Account`, `Verification` for Better Auth
-- `AppProject`
-- `Release`
-- `BuildAsset`
-- `InviteLink`
-- `InviteClaim`
-- `TesterGroup`
-- `TesterMembership`
-- `AccessPolicy`
-- `AccessPolicyWalletEntry`
-- `DeviceProfile`
-- `DownloadEvent`
-- `ReleaseViewEvent`
-- `FeedbackReport`
-- `Wallet`
-- `WalletChallenge`
-- `ReleaseUploadSession`
-
-Useful commands:
-
-```bash
-npm run db:generate
-npm run db:push
-npm run db:migrate
-npm run db:studio
+```json
+[
+  {
+    "AllowedOrigins": ["https://your-domain.example"],
+    "AllowedMethods": ["PUT"],
+    "AllowedHeaders": ["content-type", "content-length", "x-amz-meta-expected-size"],
+    "ExposeHeaders": ["etag"],
+    "MaxAgeSeconds": 3600
+  }
+]
 ```
 
-## Storage Setup
+Upload flow:
 
-The app never assumes local disk as the source of truth for APK storage.
+1. The server atomically reserves the builder quota.
+2. The browser receives a 15-minute signed R2 `PUT` URL bound to content type, size, and expected-size metadata.
+3. R2 is streamed into Vercel temporary storage during finalization; it is never buffered entirely in memory.
+4. SeekerHub verifies ZIP/APK structure, parses the binary manifest, detects APK signature markers, and computes SHA-256 while streaming.
+5. Manifest package/version fields are authoritative and the project is permanently bound to the first package name.
+6. Downloads are authorized on every request and redirect to a private 60-second signed attachment URL.
 
-Storage flow:
+The signature-marker check is not a replacement for Android `apksigner verify`. Full cryptographic verification needs a dedicated Android/Java validation service.
 
-1. Builder creates an upload session.
-2. The server returns a short-lived signed `PUT` URL.
-3. The browser uploads the APK directly to private object storage.
-4. The finalize endpoint downloads the stored object server-side, validates the APK structure, computes `SHA-256`, and persists metadata.
-5. Tester downloads always go through an authorized route that returns a short-lived signed `GET` URL.
+## Database Migrations
 
-For local development, `docker-compose.yml` starts:
+Production uses `prisma migrate deploy`; do not use `db push` against Neon.
 
-- PostgreSQL on `5432`
-- MinIO API on `9000`
-- MinIO console on `9001`
-- a one-shot bucket bootstrap container creating the `seekerhub-builds` bucket
+For a new database:
 
-## Local Development
+```bash
+npm run db:migrate:deploy
+```
 
-Run lint:
+The current production database predates Prisma migrations. Before its first migration deployment:
+
+1. Create a Neon backup branch.
+2. Point the CLI at that branch and test the sequence there.
+3. Mark the generated historical schema as already applied.
+4. Deploy the additive hardening migration.
+
+```bash
+npx prisma migrate resolve --applied 20260731000000_baseline
+npm run db:migrate:deploy
+```
+
+Only run those two commands against production after explicit approval and after the Neon branch test passes.
+
+## Identity And Access
+
+- `User` is the common identity for builders and testers.
+- `BuilderProfile` grants builder capability, status, quotas, and optional admin access.
+- Invite visitors start as guests. Magic-link or wallet recovery transfers claims, memberships, feedback, events, profiles, and wallets transactionally to the recovered account.
+- Link expiration/revocation blocks new claims. `TesterAccess` keeps project-level revocation effective across every future invite link; reactivation allows a new claim but never restores an old seat automatically.
+- Metadata visibility, APK download, and feedback permission are evaluated separately with typed reason codes.
+- Device/browser detection is advisory only. It can never provide Seeker access.
+- A Seeker gate requires a fresh wallet signature and a server-side positive-balance Token-2022 SGT check. Verification expires after 24 hours.
+
+Default public-beta quotas are one project, five retained releases, 250 MiB per APK, and 500 MiB physical storage. Trash counts until the seven-day R2 purge completes.
+
+## Operations
+
+- `/admin`: builders, suspension, quotas, storage deletion queue, immediate confirmed purge, and audit log.
+- `/api/health`: database, R2, email, cron, and invite-key readiness.
+- `/api/cron/cleanup`: releases expired reservations, removes R2 objects, purges database records, and prunes transient records.
+- `vercel.json`: daily cleanup schedule.
+- `/privacy`, `/terms`: beta legal drafts that must be reviewed before promotion. `/abuse` publishes the monitored `EMAIL_REPLY_TO` contact.
+
+## Verification
 
 ```bash
 npm run lint
-```
-
-Run unit tests:
-
-```bash
+npm run typecheck
 npm test
-```
-
-Run the Playwright smoke check:
-
-```bash
+npm run test:integration
 npm run test:e2e
+npm run build
 ```
 
-When you no longer need local file uploads, you can stop Docker:
+Integration tests require a disposable PostgreSQL database whose name contains `test`, local S3-compatible storage, and `RUN_INTEGRATION_TESTS=true`. The GitHub Actions workflow provisions PostgreSQL 16 and MinIO, applies every migration from a blank database, and runs the complete suite automatically. It never uses the production Neon or R2 connections.
 
-```bash
-docker compose down
-```
+The remaining native `bigint` binding warning comes from a Solana transitive dependency; the package falls back to its JavaScript implementation. Production audit exceptions and mitigations are tracked in `SECURITY.md`. Review them before each public deployment rather than accepting breaking downgrades proposed by `npm audit fix --force`.
 
-## Production Deployment
+## V2
 
-Recommended production stack:
-
-- Vercel for the Next.js app
-- Neon for PostgreSQL
-- Cloudflare R2 for APK storage
-
-Why this fits SeekerHub well:
-
-- the app already uses signed S3-compatible uploads and downloads
-- R2 drops into the current storage abstraction cleanly
-- Neon keeps the Prisma/PostgreSQL stack intact
-- Vercel is a good fit for the App Router pages and route handlers
-
-### Production Environment Variables
-
-Set these in Vercel Project Settings -> Environment Variables.
-
-```bash
-DATABASE_URL="postgresql://<user>:<password>@<pooled-neon-host>/<db>?sslmode=require&channel_binding=require"
-DIRECT_DATABASE_URL="postgresql://<user>:<password>@<direct-neon-host>/<db>?sslmode=require&channel_binding=require"
-BETTER_AUTH_SECRET="<long-random-secret-at-least-32-chars>"
-BETTER_AUTH_URL="https://your-domain.vercel.app"
-NEXT_PUBLIC_APP_URL="https://your-domain.vercel.app"
-
-S3_ENDPOINT="https://<cloudflare-account-id>.r2.cloudflarestorage.com"
-S3_REGION="auto"
-S3_BUCKET="seekerhub-builds"
-S3_ACCESS_KEY_ID="<r2-access-key-id>"
-S3_SECRET_ACCESS_KEY="<r2-secret-access-key>"
-S3_FORCE_PATH_STYLE="false"
-
-SOLANA_RPC_URL="https://mainnet.helius-rpc.com/?api-key=<your-key>"
-NEXT_PUBLIC_SOLANA_RPC_URL="https://mainnet.helius-rpc.com/?api-key=<your-key>"
-HELIUS_API_KEY="<your-key>"
-```
-
-Notes:
-
-- `DATABASE_URL` should use the pooled Neon connection string for runtime traffic.
-- `DIRECT_DATABASE_URL` should use the non-pooled direct Neon connection string for Prisma CLI commands like `db push` and `migrate`.
-- `S3_FORCE_PATH_STYLE` should stay `false` for Cloudflare R2.
-- `S3_REGION` should be `auto` for Cloudflare R2.
-
-### Deployment Order
-
-1. Create a Neon project and copy both connection strings:
-   - pooled connection string -> `DATABASE_URL`
-   - direct connection string -> `DIRECT_DATABASE_URL`
-2. Create a Cloudflare R2 bucket named `seekerhub-builds`.
-3. Create an R2 API token / access key pair with read and write access to that bucket.
-4. Add all environment variables to Vercel.
-5. Deploy the app to Vercel.
-6. Run Prisma against the Neon database:
-
-```bash
-npm install
-npm run db:generate
-npm run db:push
-```
-
-Run those commands from your machine with the production `DATABASE_URL` and `DIRECT_DATABASE_URL` loaded in the environment, or from a secure CI step.
-
-### What Changes After Deployment
-
-- APK uploads no longer touch your laptop or local Docker containers.
-- The browser uploads directly to Cloudflare R2 using short-lived signed URLs.
-- Release finalization runs in the deployed Next.js backend.
-- PostgreSQL data lives in Neon instead of your local Postgres container.
-- Docker remains optional and only useful for local fallback development.
-
-## Seeker Detection Integration
-
-Seeker support is intentionally split into two layers.
-
-Web core:
-
-- `useDeviceContext()` computes a privacy-safe device context.
-- It exposes:
-  - `isSeeker`
-  - `isSolanaMobileCapable`
-  - `hasMobileWalletAdapterContext`
-  - `recognitionSource`
-  - normalized browser / OS / device class fields
-- On the web MVP, Seeker detection is conservative:
-  - Solana Mobile capability is inferred from browser context
-  - `isSeeker` becomes hard-true only when wallet verification proves Seeker Genesis ownership
-
-Optional stricter path:
-
-- linked wallets can be verified server-side against Seeker Genesis Token rules
-- release policies can require:
-  - linked wallet
-  - Solana Mobile capable device
-  - verified Seeker wallet
-
-Relevant files:
-
-- [src/features/seeker/use-device-context.ts](/e:/CODE/PERSO/SEEKERHUB_BETATEST/src/features/seeker/use-device-context.ts)
-- [src/lib/device/detect.ts](/e:/CODE/PERSO/SEEKERHUB_BETATEST/src/lib/device/detect.ts)
-- [src/lib/solana/sgt.ts](/e:/CODE/PERSO/SEEKERHUB_BETATEST/src/lib/solana/sgt.ts)
-- [src/lib/access.ts](/e:/CODE/PERSO/SEEKERHUB_BETATEST/src/lib/access.ts)
-
-## Security Notes
-
-- APK objects are stored privately and never served as public static files.
-- Invite links store only hashed tokens in the database.
-- Download authorization is re-evaluated server-side on each request.
-- Wallet linking uses signed challenge messages.
-- Device profiles store only privacy-safe derived context, not raw hardware identifiers.
-
-## V2 Improvements
-
-- dedicated companion mobile app for stronger Seeker-native detection
-- email delivery for invite links and auth flows
-- richer tester management, manual membership assignment, and revoke flows
-- release rollback and channel support
-- build integrity metadata beyond SHA-256, including signer certificate inspection
-- per-release crash ingestion and attachments in feedback reports
-- webhook integrations for builder notifications
-- Helius-backed analytics and Seeker ecosystem enrichment
+- Dedicated mobile companion for richer native Seeker context
+- Android `apksigner` verification service and signer certificate history
+- Invite email campaigns and webhook notifications
+- Crash/ANR ingestion and feedback attachments
+- Release channels, rollback, and organization workspaces
+- Stronger analytics deduplication and export

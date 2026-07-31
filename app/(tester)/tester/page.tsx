@@ -7,16 +7,22 @@ import { EmptyState } from "@/src/components/ui/empty-state";
 import { WalletLinkCard } from "@/src/features/wallet/wallet-link-card";
 import { SeekerStatusCard } from "@/src/features/seeker/seeker-status-card";
 import { getAccessibleReleasesForUser, getTesterIdentity } from "@/src/features/projects/queries";
-import { requireSession } from "@/src/lib/session";
+import { requireTesterSession } from "@/src/lib/session";
 import { compactChecksum, cn, formatBytes } from "@/src/lib/utils";
+import { prisma } from "@/src/lib/db";
 
 export default async function TesterDashboardPage() {
-  const session = await requireSession();
+  const session = await requireTesterSession();
   const [releases, tester] = await Promise.all([
     getAccessibleReleasesForUser(session.user.id),
     getTesterIdentity(session.user.id),
   ]);
-  const verifiedSeeker = tester?.wallets.some((wallet) => Boolean(wallet.seekerGenesisVerifiedAt)) ?? false;
+  const canBuild = Boolean(
+    await prisma.builderProfile.findUnique({ where: { userId: session.user.id }, select: { id: true } }),
+  );
+  const verifiedSeeker = tester?.wallets.some(
+    (wallet) => wallet.seekerGenesisVerificationExpiresAt && wallet.seekerGenesisVerificationExpiresAt > new Date(),
+  ) ?? false;
 
   return (
     <DashboardFrame
@@ -24,7 +30,21 @@ export default async function TesterDashboardPage() {
       currentPath="/tester"
       title="Accessible releases"
       subtitle="Claim invite links, link a wallet when needed, and keep the release-detail flow mobile first."
+      canBuild={canBuild}
     >
+      {session.user.isAnonymous ? (
+        <Card className="mb-6 rounded-[1.75rem] border-brand/30 bg-brand/5">
+          <CardHeader>
+            <CardTitle>Protect this guest access</CardTitle>
+            <CardDescription>
+              Add an email magic link so these invites, downloads, feedback reports, and linked wallets can be recovered on another device.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Link href="/tester/upgrade" className={cn(buttonVariants())}>Protect tester access</Link>
+          </CardContent>
+        </Card>
+      ) : null}
       <div className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
         <div className="space-y-6">
           <Card className="rounded-[1.75rem]">

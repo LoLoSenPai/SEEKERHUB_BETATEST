@@ -1,117 +1,130 @@
+import { mkdtemp, rmdir, unlink } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { NextResponse } from "next/server";
-import { auth } from "@/src/lib/auth";
-import { inspectApkBuffer } from "@/src/lib/apk";
+import { inspectApkFile } from "@/src/lib/apk";
 import { prisma } from "@/src/lib/db";
-import { downloadObjectBytes, getBucketName, headObject } from "@/src/lib/storage/s3";
+import { apiError, AppError } from "@/src/lib/errors";
+import { releaseUploadReservation } from "@/src/lib/quota";
+import { requireBuilderApiSession } from "@/src/lib/session";
+import { deleteObject, downloadObjectToFile, getBucketName, headObject } from "@/src/lib/storage/s3";
 import { releaseDraftInputSchema } from "@/src/lib/validation";
+import { reconcilePendingInviteGrants } from "@/src/lib/invite-access";
+import { logger } from "@/src/lib/logger";
 
-const FINALIZE_RETRY_COUNT = 3;
-const FINALIZE_RETRY_DELAY_MS = 450;
+export const runtime = "nodejs";
+export const maxDuration = 300;
 
-function wait(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-async function downloadAndInspectUpload(
-  storageKey: string,
-  expectedSize: bigint | null,
-) {
-  let lastError: Error | null = null;
-
-  for (let attempt = 0; attempt <= FINALIZE_RETRY_COUNT; attempt += 1) {
-    try {
-      const head = await headObject(storageKey);
-      const storageSize = head.ContentLength != null ? BigInt(head.ContentLength) : null;
-
-      if (expectedSize && storageSize && storageSize !== expectedSize) {
-        throw new Error(
-          `Stored object size mismatch before validation. Expected ${expectedSize.toString()} bytes, got ${storageSize.toString()} bytes.`,
-        );
-      }
-
-      const fileBuffer = await downloadObjectBytes(storageKey);
-      const downloadedSize = BigInt(fileBuffer.byteLength);
-
-      if (expectedSize && downloadedSize !== expectedSize) {
-        throw new Error(
-          `Downloaded object size mismatch before APK validation. Expected ${expectedSize.toString()} bytes, got ${downloadedSize.toString()} bytes.`,
-        );
-      }
-
-      return await inspectApkBuffer(fileBuffer);
-    } catch (error) {
-      lastError = error instanceof Error ? error : new Error("Unable to inspect uploaded APK.");
-
-      if (attempt < FINALIZE_RETRY_COUNT) {
-        await wait(FINALIZE_RETRY_DELAY_MS);
-        continue;
-      }
-    }
+async function inspectStoredUpload(storageKey: string, expectedSize: bigint) {
+  const head = await headObject(storageKey);
+  const storageSize = head.ContentLength == null ? null : BigInt(head.ContentLength);
+  if (storageSize !== expectedSize || head.Metadata?.["expected-size"] !== expectedSize.toString()) {
+    throw new AppError("The stored object size does not match the reserved upload.", 400, "UPLOAD_SIZE_MISMATCH");
   }
 
-  throw lastError ?? new Error("Unable to inspect uploaded APK.");
+  const directory = await mkdtemp(join(tmpdir(), "seekerhub-apk-"));
+  const filePath = join(directory, "release.apk");
+  try {
+    await downloadObjectToFile(storageKey, filePath);
+    const metadata = await inspectApkFile(filePath);
+    if (metadata.fileSizeBytes !== expectedSize) {
+      throw new AppError("The downloaded APK size does not match the reserved upload.", 400, "UPLOAD_SIZE_MISMATCH");
+    }
+    return metadata;
+  } finally {
+    await unlink(filePath).catch(() => undefined);
+    await rmdir(directory).catch(() => undefined);
+  }
 }
 
 export async function POST(request: Request, { params }: { params: Promise<{ sessionId: string }> }) {
   const { sessionId } = await params;
+  let storageKey: string | null = null;
+  let claimedForFinalize = false;
+  let finalized = false;
 
   try {
-    const session = await auth.api.getSession({ headers: request.headers });
-
-    if (!session) {
-      return NextResponse.json({ error: "Authentication required." }, { status: 401 });
-    }
-
-    const uploadSession = await prisma.releaseUploadSession.findUnique({
-      where: { id: sessionId },
-      include: {
-        project: true,
-      },
+    const session = await requireBuilderApiSession(request);
+    const upload = await prisma.releaseUploadSession.findFirst({
+      where: { id: sessionId, userId: session.user.id },
+      include: { project: true },
     });
-
-    if (!uploadSession || uploadSession.userId !== session.user.id) {
-      return NextResponse.json({ error: "Upload session not found." }, { status: 404 });
+    if (!upload || upload.project.deletedAt) throw new AppError("Upload session not found.", 404, "UPLOAD_NOT_FOUND");
+    storageKey = upload.storageKey;
+    if (upload.completedAt) throw new AppError("Upload session already finalized.", 409, "UPLOAD_ALREADY_FINALIZED");
+    if (upload.reservationReleasedAt || upload.expiresAt <= new Date()) {
+      throw new AppError("Upload session expired.", 410, "UPLOAD_EXPIRED");
     }
+    if (!upload.expectedSize || upload.expectedSize <= 0n) throw new AppError("Upload size reservation is missing.", 400);
 
-    if (uploadSession.completedAt) {
-      return NextResponse.json({ error: "Upload session already finalized." }, { status: 409 });
+    const claim = await prisma.releaseUploadSession.updateMany({
+      where: {
+        id: upload.id,
+        userId: session.user.id,
+        completedAt: null,
+        reservationReleasedAt: null,
+        finalizingAt: null,
+        expiresAt: { gt: new Date() },
+      },
+      data: { finalizingAt: new Date() },
+    });
+    if (!claim.count) {
+      const current = await prisma.releaseUploadSession.findUnique({ where: { id: upload.id } });
+      if (current?.completedAt) throw new AppError("Upload session already finalized.", 409, "UPLOAD_ALREADY_FINALIZED");
+      if (current?.finalizingAt) throw new AppError("Upload finalization is already in progress.", 409, "UPLOAD_FINALIZING");
+      throw new AppError("Upload session expired.", 410, "UPLOAD_EXPIRED");
     }
+    claimedForFinalize = true;
 
-    if (uploadSession.expiresAt < new Date()) {
-      return NextResponse.json({ error: "Upload session expired." }, { status: 410 });
-    }
-
-    const fileMetadata = await downloadAndInspectUpload(
-      uploadSession.storageKey,
-      uploadSession.expectedSize,
-    );
-    const draft = releaseDraftInputSchema.parse(uploadSession.draftJson);
+    const metadata = await inspectStoredUpload(upload.storageKey, upload.expectedSize);
+    const draft = releaseDraftInputSchema.parse(upload.draftJson);
 
     const release = await prisma.$transaction(async (tx) => {
+      const project = await tx.appProject.findFirst({
+        where: { id: upload.projectId, ownerId: session.user.id, deletedAt: null },
+      });
+      if (!project) throw new AppError("Project not found.", 404, "PROJECT_NOT_FOUND");
+      if (project.androidPackageName && project.androidPackageName !== metadata.packageName) {
+        throw new AppError(
+          `This project is bound to ${project.androidPackageName}; the uploaded APK contains ${metadata.packageName}.`,
+          409,
+          "ANDROID_PACKAGE_MISMATCH",
+        );
+      }
+
+      if (draft.accessPolicy.testerGroupId) {
+        const group = await tx.testerGroup.findFirst({
+          where: { id: draft.accessPolicy.testerGroupId, projectId: project.id },
+        });
+        if (!group) throw new AppError("Tester group not found in this project.", 400, "INVALID_TESTER_GROUP");
+      }
+
       const createdRelease = await tx.release.create({
         data: {
-          projectId: uploadSession.projectId,
+          projectId: project.id,
           createdById: session.user.id,
-          versionName: draft.versionName,
-          versionCode: draft.versionCode,
+          versionName: metadata.versionName,
+          versionCode: metadata.versionCode,
+          minSdk: metadata.minSdk,
+          targetSdk: metadata.targetSdk,
           changelog: draft.changelog,
           status: "PUBLISHED",
         },
       });
-
+      await tx.appProject.update({ where: { id: project.id }, data: { androidPackageName: metadata.packageName } });
       await tx.buildAsset.create({
         data: {
           releaseId: createdRelease.id,
-          storageKey: uploadSession.storageKey,
+          storageKey: upload.storageKey,
           bucket: getBucketName(),
-          originalFileName: uploadSession.originalFileName,
-          contentType: fileMetadata.detectedMimeType,
-          fileSizeBytes: fileMetadata.fileSizeBytes,
-          sha256Checksum: fileMetadata.sha256Checksum,
+          originalFileName: upload.originalFileName,
+          contentType: metadata.detectedMimeType,
+          fileSizeBytes: metadata.fileSizeBytes,
+          sha256Checksum: metadata.sha256Checksum,
+          hasApkSignature: metadata.hasApkSignature,
           validatedAt: new Date(),
         },
       });
-
       await tx.accessPolicy.create({
         data: {
           releaseId: createdRelease.id,
@@ -121,31 +134,63 @@ export async function POST(request: Request, { params }: { params: Promise<{ ses
           requireSolanaMobile: draft.accessPolicy.requireSolanaMobile,
           requireVerifiedSeeker: draft.accessPolicy.requireVerifiedSeeker,
           allowPreviousReleases: draft.accessPolicy.allowPreviousReleases,
-          walletEntries: {
-            create: draft.accessPolicy.walletAllowlist.map((address) => ({
-              address,
-            })),
-          },
+          walletEntries: { create: draft.accessPolicy.walletAllowlist.map((address) => ({ address })) },
         },
       });
-
       await tx.releaseUploadSession.update({
-        where: { id: uploadSession.id },
+        where: { id: upload.id },
+        data: { completedAt: new Date(), reservationReleasedAt: new Date(), finalizingAt: null },
+      });
+      await tx.builderProfile.update({
+        where: { userId: session.user.id },
         data: {
-          completedAt: new Date(),
+          reservedStorageBytes: { decrement: upload.reservedBytes },
+          usedStorageBytes: { increment: metadata.fileSizeBytes },
         },
       });
-
+      await tx.auditLog.create({
+        data: {
+          actorUserId: session.user.id,
+          action: "release.published",
+          targetType: "Release",
+          targetId: createdRelease.id,
+          metadataJson: { packageName: metadata.packageName, versionCode: metadata.versionCode },
+        },
+      });
       return createdRelease;
     });
 
-    return NextResponse.json({ releaseId: release.id });
-  } catch (error) {
-    return NextResponse.json(
-      {
-        error: error instanceof Error ? error.message : "Unable to finalize release upload.",
+    finalized = true;
+    const pendingUsers = await prisma.inviteClaim.findMany({
+      where: { grantedAt: null, revokedAt: null, inviteLink: { projectId: upload.projectId } },
+      distinct: ["userId"],
+      select: { userId: true },
+    });
+    await Promise.all(pendingUsers.map(({ userId }) => reconcilePendingInviteGrants(userId, upload.projectId))).catch((error) => {
+      logger.error("invite.post_publish_reconciliation_failed", { projectId: upload.projectId, error });
+    });
+    return NextResponse.json({
+      releaseId: release.id,
+      metadata: {
+        packageName: metadata.packageName,
+        versionName: metadata.versionName,
+        versionCode: metadata.versionCode,
+        minSdk: metadata.minSdk,
+        targetSdk: metadata.targetSdk,
+        fileSizeBytes: metadata.fileSizeBytes.toString(),
+        sha256Checksum: metadata.sha256Checksum,
+        signatureMarkerDetected: metadata.hasApkSignature,
       },
-      { status: 400 },
-    );
+    });
+  } catch (error) {
+    if (!finalized && claimedForFinalize) {
+      await releaseUploadReservation(sessionId).catch((cleanupError) => {
+        logger.error("upload.reservation_cleanup_failed", { sessionId, error: cleanupError });
+      });
+      if (storageKey) await deleteObject(storageKey).catch((cleanupError) => {
+        logger.error("upload.object_cleanup_failed", { sessionId, storageKey, error: cleanupError });
+      });
+    }
+    return apiError(error, "Unable to finalize release upload.");
   }
 }

@@ -5,10 +5,10 @@ import { Label } from "@/src/components/ui/label";
 import { PendingSubmitButton } from "@/src/components/ui/pending-submit-button";
 import { Textarea } from "@/src/components/ui/textarea";
 import { createProjectAction } from "@/src/features/projects/actions";
-import { requireSession } from "@/src/lib/session";
+import { requireBuilderSession } from "@/src/lib/session";
 
 export default async function NewAppProjectPage() {
-  await requireSession();
+  await requireBuilderSession();
 
   return (
     <DashboardFrame

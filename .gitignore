@@ -12,6 +12,8 @@
 
 # testing
 /coverage
+/playwright-report/
+/test-results/
 
 # next.js
 /.next/
@@ -44,4 +46,6 @@ next-env.d.ts
 
 /output
 
-playwright.config.ts
+/.vercel/
+.env.local
+.env.*.local

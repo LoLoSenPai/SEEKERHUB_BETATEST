@@ -66,7 +66,7 @@ Keep the bucket private. The R2 token needs Object Read & Write only for the sel
   {
     "AllowedOrigins": ["https://your-domain.example"],
     "AllowedMethods": ["PUT"],
-    "AllowedHeaders": ["content-type", "content-length", "x-amz-meta-expected-size"],
+    "AllowedHeaders": ["content-type", "content-length"],
     "ExposeHeaders": ["etag"],
     "MaxAgeSeconds": 3600
   }
@@ -76,8 +76,8 @@ Keep the bucket private. The R2 token needs Object Read & Write only for the sel
 Upload flow:
 
 1. The server atomically reserves the builder quota.
-2. The browser receives a 15-minute signed R2 `PUT` URL bound to content type, size, and expected-size metadata.
-3. R2 is streamed into Vercel temporary storage during finalization; it is never buffered entirely in memory.
+2. The browser receives a 15-minute signed R2 `PUT` URL bound to content type and size.
+3. Finalization verifies R2 `Content-Length`, then streams the object into Vercel temporary storage; it is never buffered entirely in memory.
 4. SeekerHub verifies ZIP/APK structure, parses the binary manifest, detects APK signature markers, and computes SHA-256 while streaming.
 5. Manifest package/version fields are authoritative and the project is permanently bound to the first package name.
 6. Downloads are authorized on every request and redirect to a private 60-second signed attachment URL.

@@ -1,0 +1,19 @@
+# Local secrets must never be uploaded with deployment sources.
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+# Local tooling and generated artifacts.
+.vscode/
+.git/
+.github/
+.next/
+.vercel/
+node_modules/
+coverage/
+playwright-report/
+test-results/
+output/
+*.tsbuildinfo
+*.log

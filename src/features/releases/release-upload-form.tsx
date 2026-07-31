@@ -133,7 +133,6 @@ export function ReleaseUploadForm({
               const xhr = new XMLHttpRequest();
               xhr.open("PUT", uploadUrl);
               xhr.setRequestHeader("content-type", file.type || "application/vnd.android.package-archive");
-              xhr.setRequestHeader("x-amz-meta-expected-size", String(file.size));
               xhr.upload.onprogress = (progressEvent) => {
                 if (progressEvent.lengthComputable) setUploadProgress(Math.round((progressEvent.loaded / progressEvent.total) * 100));
               };

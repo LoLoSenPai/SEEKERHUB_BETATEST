@@ -122,12 +122,12 @@ integrationDescribe("public beta database invariants", () => {
       const upload = await fetch(uploadUrl, {
         method: "PUT",
         headers: {
+          "content-length": String(body.byteLength),
           "content-type": "application/octet-stream",
-          "x-amz-meta-expected-size": String(body.byteLength),
         },
         body,
       });
-      expect(upload.ok).toBe(true);
+      expect(upload.ok, await upload.text()).toBe(true);
 
       const head = await headObject(storageKey);
       expect(head.ContentLength).toBe(body.byteLength);

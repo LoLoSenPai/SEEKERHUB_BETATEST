@@ -1,6 +1,6 @@
 import type { BetterAuthRateLimitStorage } from "better-auth";
-import { Prisma } from "@prisma/client";
 import { prisma } from "@/src/lib/db";
+import { isUniqueConstraintError } from "@/src/lib/prisma-errors";
 import { hashRateLimitIdentity } from "@/src/lib/rate-limit";
 
 function hashedKey(key: string) {
@@ -33,7 +33,7 @@ async function consume(key: string, rule: { window: number; max: number }) {
         });
         return { allowed: true, retryAfter: null };
       } catch (error) {
-        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") continue;
+        if (isUniqueConstraintError(error)) continue;
         throw error;
       }
     }

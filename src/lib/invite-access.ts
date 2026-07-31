@@ -1,5 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/src/lib/db";
+import { isTransactionConflict } from "@/src/lib/prisma-errors";
 
 function walletMeetsPolicy(
   policy: {
@@ -109,7 +110,7 @@ export async function reconcilePendingInviteGrants(userId: string, projectId?: s
         );
         break;
       } catch (error) {
-        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2034" && attempt === 0) continue;
+        if (isTransactionConflict(error) && attempt === 0) continue;
         throw error;
       }
     }

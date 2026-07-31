@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { parseEnvBoolean } from "@/src/lib/env";
+import { isTransactionConflict, isUniqueConstraintError } from "@/src/lib/prisma-errors";
 import { safeReturnTo } from "@/src/lib/redirect";
 import { accessPolicyInputSchema, deviceContextInputSchema } from "@/src/lib/validation";
 
@@ -39,5 +40,15 @@ describe("public beta hardening helpers", () => {
     expect(safeReturnTo("/tester/releases/abc", "/tester")).toBe("/tester/releases/abc");
     expect(safeReturnTo("//evil.example", "/tester")).toBe("/tester");
     expect(safeReturnTo("https://evil.example", "/tester")).toBe("/tester");
+  });
+
+  it("recognizes serializable conflicts emitted directly by driver adapters", () => {
+    expect(isTransactionConflict({ name: "DriverAdapterError", cause: { kind: "TransactionWriteConflict" } })).toBe(true);
+    expect(isTransactionConflict({ name: "DriverAdapterError", cause: { originalCode: "40001" } })).toBe(true);
+  });
+
+  it("recognizes unique violations emitted directly by driver adapters", () => {
+    expect(isUniqueConstraintError({ name: "DriverAdapterError", cause: { kind: "UniqueConstraintViolation" } })).toBe(true);
+    expect(isUniqueConstraintError({ name: "DriverAdapterError", cause: { originalCode: "23505" } })).toBe(true);
   });
 });

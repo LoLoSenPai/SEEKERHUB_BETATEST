@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/src/lib/db";
 import { AppError } from "@/src/lib/errors";
+import { isTransactionConflict } from "@/src/lib/prisma-errors";
 
 export const DEFAULT_MAX_APK_BYTES = 250 * 1024 * 1024;
 
@@ -73,7 +74,7 @@ export async function reserveUploadQuota(input: {
         { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
       );
     } catch (error) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2034" && attempt === 0) continue;
+      if (isTransactionConflict(error) && attempt === 0) continue;
       throw error;
     }
   }

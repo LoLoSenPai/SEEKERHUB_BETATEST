@@ -3,6 +3,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/src/lib/db";
 import { getServerEnv } from "@/src/lib/env";
 import { AppError } from "@/src/lib/errors";
+import { isTransactionConflict, isUniqueConstraintError } from "@/src/lib/prisma-errors";
 
 export const RATE_LIMITS = {
   auth: { limit: 5, windowMs: 15 * 60_000 },
@@ -59,11 +60,7 @@ export async function consumeRateLimit(input: {
       }
       return;
     } catch (error) {
-      if (
-        error instanceof Prisma.PrismaClientKnownRequestError &&
-        ["P2034", "P2002"].includes(error.code) &&
-        attempt === 0
-      ) {
+      if ((isTransactionConflict(error) || isUniqueConstraintError(error)) && attempt === 0) {
         continue;
       }
       throw error;

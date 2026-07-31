@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/src/lib/db";
 import { AppError } from "@/src/lib/errors";
+import { isTransactionConflict, isUniqueConstraintError } from "@/src/lib/prisma-errors";
 import { toSlug } from "@/src/lib/utils";
 
 export async function createProjectWithinQuota(input: {
@@ -47,8 +48,8 @@ export async function createProjectWithinQuota(input: {
         { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
       );
     } catch (error) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2034") continue;
-      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      if (isTransactionConflict(error)) continue;
+      if (isUniqueConstraintError(error)) {
         slugSequence += 1;
         continue;
       }

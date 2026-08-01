@@ -10,11 +10,12 @@ import { hashedAuthRateLimitStorage } from "@/src/lib/auth-rate-limit";
 import { solanaWalletAuthPlugin } from "@/src/lib/solana/wallet-auth-plugin";
 
 const env = getServerEnv();
+const vercelDeploymentOrigin = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null;
 
 export const auth = betterAuth({
   appName: "SeekerHub",
   baseURL: env.BETTER_AUTH_URL,
-  trustedOrigins: [env.BETTER_AUTH_URL],
+  trustedOrigins: [env.BETTER_AUTH_URL, ...(vercelDeploymentOrigin ? [vercelDeploymentOrigin] : [])],
   secret: env.BETTER_AUTH_SECRET,
   database: prismaAdapter(prisma, {
     provider: "postgresql",

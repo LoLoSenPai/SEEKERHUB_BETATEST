@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { DashboardFrame } from "@/src/components/layout/dashboard-frame";
+import { BuilderJourney } from "@/src/components/layout/builder-journey";
 import { ReleaseUploadForm } from "@/src/features/releases/release-upload-form";
 import { getProjectForOwner } from "@/src/features/projects/queries";
 import { requireBuilderSession } from "@/src/lib/session";
@@ -21,6 +22,13 @@ export default async function NewReleasePage({ params }: { params: Promise<{ slu
       subtitle="Presigned upload first, server-side APK validation second, then publish a private beta release with a clean access policy."
       identityLabel={session.user.email}
     >
+      <BuilderJourney
+        projectSlug={project.slug}
+        current="release"
+        releaseCount={project.releases.length}
+        inviteCount={project.inviteLinks.length}
+        downloadCount={project.releases.reduce((total, release) => total + release.downloadEvents.length, 0)}
+      />
       <ReleaseUploadForm
         projectId={project.id}
         projectSlug={project.slug}

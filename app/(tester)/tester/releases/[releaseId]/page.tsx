@@ -55,6 +55,7 @@ export default async function TesterReleaseDetailPage({
       title={release.project.name}
       subtitle={`Private Android beta, version ${release.versionName}`}
       canBuild={canBuild}
+      isGuest={Boolean(session.user.isAnonymous)}
       identityLabel={session.user.isAnonymous ? "Guest tester" : session.user.email}
     >
       <Link href="/tester" className="mb-4 inline-flex items-center gap-2 text-sm font-semibold text-muted-foreground transition hover:text-foreground">

@@ -77,6 +77,28 @@ describe("evaluateReleaseAccess", () => {
     expect(result.canDownload).toBe(true);
   });
 
+  it("does not let an older release invite expose future builds", () => {
+    const result = evaluate({
+      policy: { ...basePolicy, requireInviteAcceptance: true },
+      releaseId: "future-release",
+      releasePublishedAt: new Date("2026-08-15T12:00:00.000Z"),
+      inviteClaims: [{
+        grantedAt: new Date(),
+        inviteLink: {
+          projectId: "project",
+          releaseId: "older-release",
+          release: {
+            publishedAt: new Date("2026-07-31T12:00:00.000Z"),
+            accessPolicy: { allowPreviousReleases: true },
+          },
+        },
+      }],
+    });
+    expect(result.canViewMetadata).toBe(false);
+    expect(result.canDownload).toBe(false);
+    expect(result.reasons[0].code).toBe("INVITE_REQUIRED");
+  });
+
   it("shows metadata but blocks a pending eligible-place claim", () => {
     const result = evaluate({
       policy: { ...basePolicy, requireInviteAcceptance: true },

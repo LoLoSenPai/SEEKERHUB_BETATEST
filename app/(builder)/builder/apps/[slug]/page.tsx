@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { DashboardFrame } from "@/src/components/layout/dashboard-frame";
+import { BuilderJourney } from "@/src/components/layout/builder-journey";
 import { Badge } from "@/src/components/ui/badge";
 import { buttonVariants } from "@/src/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/src/components/ui/card";
@@ -37,27 +38,13 @@ export default async function BuilderProjectPage({
       subtitle={project.description || "No project description yet."}
       identityLabel={session.user.email}
     >
-      <Card className="mb-6 rounded-[1.75rem] border-brand/25 bg-brand/5">
-        <CardHeader>
-          <div className="section-eyebrow">Beta workflow</div>
-          <CardTitle>Publish, share, learn, repeat</CardTitle>
-          <CardDescription>The recommended path for every new Android build.</CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <Link href={`/builder/apps/${project.slug}/releases/new`} className="rounded-2xl border border-border bg-card p-4 transition hover:bg-muted/60">
-            <div className="text-xs font-semibold text-brand">01</div><div className="mt-2 font-semibold">Upload APK</div><p className="mt-1 text-sm text-muted-foreground">Create the next release.</p>
-          </Link>
-          <div className="rounded-2xl border border-border bg-card p-4">
-            <div className="text-xs font-semibold text-brand">02</div><div className="mt-2 font-semibold">Choose audience</div><p className="mt-1 text-sm text-muted-foreground">FCFS, group, wallet, or Seeker.</p>
-          </div>
-          <Link href={`/builder/apps/${project.slug}/invites`} className="rounded-2xl border border-border bg-card p-4 transition hover:bg-muted/60">
-            <div className="text-xs font-semibold text-brand">03</div><div className="mt-2 font-semibold">Share invite</div><p className="mt-1 text-sm text-muted-foreground">Copy a controlled access link.</p>
-          </Link>
-          <div className="rounded-2xl border border-border bg-card p-4">
-            <div className="text-xs font-semibold text-brand">04</div><div className="mt-2 font-semibold">Review feedback</div><p className="mt-1 text-sm text-muted-foreground">Open a release to inspect reports.</p>
-          </div>
-        </CardContent>
-      </Card>
+      <BuilderJourney
+        projectSlug={project.slug}
+        current={project.releases.length ? (project.inviteLinks.length ? "review" : "invite") : "release"}
+        releaseCount={project.releases.length}
+        inviteCount={project.inviteLinks.length}
+        downloadCount={project.releases.reduce((total, release) => total + release.downloadEvents.length, 0)}
+      />
       <div className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
         <div className="order-2 grid gap-6 xl:order-1">
           <Card className="rounded-[1.75rem]">

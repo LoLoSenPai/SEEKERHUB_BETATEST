@@ -70,6 +70,9 @@ export function InviteClaimCard({
         >
           {loading ? "Opening beta access..." : "Open beta access"}
         </Button>
+        <p className="text-xs leading-5 text-muted-foreground">
+          Reopening this link in the same browser does not use another tester place. Guest access remains tied to this browser until you add a recovery email or wallet.
+        </p>
       </CardContent>
     </Card>
   );

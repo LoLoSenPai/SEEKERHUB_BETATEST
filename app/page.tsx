@@ -29,7 +29,7 @@ export default function Home() {
         <section className="grid flex-1 items-center gap-10 py-12 lg:grid-cols-[1.1fr_0.9fr]">
           <div className="space-y-8">
             <div className="inline-flex items-center rounded-full border border-border bg-surface px-4 py-2 text-xs font-medium tracking-[0.2em] text-muted-foreground shadow-sm backdrop-blur">
-              WEB-FIRST MVP FOR SEEKER BUILDERS
+              PRIVATE BETA DISTRIBUTION FOR SOLANA MOBILE
             </div>
             <div className="space-y-5">
               <h1 className="max-w-3xl text-5xl font-semibold tracking-tight text-foreground sm:text-6xl">

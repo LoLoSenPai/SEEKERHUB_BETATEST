@@ -7,6 +7,7 @@ import { Button } from "@/src/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/src/components/ui/card";
 import { Input } from "@/src/components/ui/input";
 import { Label } from "@/src/components/ui/label";
+import { FieldLabel } from "@/src/components/ui/field-help";
 import { Textarea } from "@/src/components/ui/textarea";
 import { AccessPolicyFields } from "@/src/features/releases/access-policy-fields";
 
@@ -33,7 +34,7 @@ export function ReleaseUploadForm({
   return (
     <Card className="rounded-[2rem]">
       <CardHeader>
-        <div className="section-eyebrow">Phase 2</div>
+        <div className="section-eyebrow">New release</div>
         <CardTitle>Upload a release APK</CardTitle>
         <CardDescription>
           Create a release draft, upload the signed APK to private storage, inspect file metadata, then publish the release.
@@ -155,17 +156,26 @@ export function ReleaseUploadForm({
             setLoading(false);
           }}}
         >
-          <div className="rounded-[1.5rem] border border-border bg-muted/60 p-5">
+          <div className="grid gap-4 rounded-[1.5rem] border border-border bg-muted/60 p-5">
             <div className="section-eyebrow">1 - APK</div>
-            <div className="mt-2 text-sm leading-6 text-muted-foreground">Select one signed release APK. Package, version name, version code, min SDK, and target SDK are read from AndroidManifest.xml and override manual input.</div>
+            <div>
+              <h3 className="font-semibold text-foreground">Select the Android build</h3>
+              <p className="mt-1 text-sm leading-6 text-muted-foreground">Package, version, and SDK metadata are read from AndroidManifest.xml. Use a signed release APK, not an AAB or debug bundle.</p>
+            </div>
+            <div className="grid gap-2">
+              <FieldLabel
+                htmlFor="apk"
+                helpTitle="Signed release APK"
+                help="Upload the .apk produced by your release build, for example app-release.apk. SeekerHub checks its archive, manifest, size, checksum, and APK signature marker."
+              >
+                Signed APK (max 250 MiB)
+              </FieldLabel>
+              <Input id="apk" name="apk" type="file" accept=".apk,application/vnd.android.package-archive,application/octet-stream" required />
+            </div>
           </div>
           <div className="grid gap-2">
             <Label htmlFor="changelog">2 - Release notes</Label>
             <Textarea id="changelog" name="changelog" placeholder="What changed in this release?" required />
-          </div>
-          <div className="grid gap-2">
-            <Label htmlFor="apk">Signed APK (max 250 MiB)</Label>
-            <Input id="apk" name="apk" type="file" accept=".apk,application/vnd.android.package-archive,application/octet-stream" required />
           </div>
 
           <div className="grid gap-5 rounded-[1.5rem] border border-border bg-muted/60 p-5">

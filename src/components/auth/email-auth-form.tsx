@@ -9,6 +9,7 @@ import { Button } from "@/src/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/src/components/ui/card";
 import { Input } from "@/src/components/ui/input";
 import { Label } from "@/src/components/ui/label";
+import { PasswordInput } from "@/src/components/ui/password-input";
 
 export function EmailAuthForm({
   mode,
@@ -104,7 +105,7 @@ export function EmailAuthForm({
                 <Label htmlFor="password">Password</Label>
                 {mode === "sign-in" ? <Link href="/forgot-password" className="text-xs font-semibold text-muted-foreground hover:text-foreground">Forgot password?</Link> : null}
               </div>
-              <Input id="password" name="password" type="password" autoComplete={mode === "sign-in" ? "current-password" : "new-password"} minLength={8} required />
+              <PasswordInput id="password" name="password" autoComplete={mode === "sign-in" ? "current-password" : "new-password"} minLength={8} required />
             </div>
           ) : null}
           <div aria-live="polite">

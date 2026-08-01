@@ -28,8 +28,8 @@ const presets: Array<{
 }> = [
   {
     id: "invite",
-    title: "FCFS invite link",
-    description: "Anyone with the link can claim an eligible seat until its max-use limit is reached.",
+    title: "Limited invite link",
+    description: "Share one link, then choose its tester limit when you create the invitation.",
     icon: Link2,
   },
   {
@@ -46,8 +46,8 @@ const presets: Array<{
   },
   {
     id: "seeker",
-    title: "Verified Seeker FCFS",
-    description: "A shared invite works only after the tester proves a current Seeker Genesis Token.",
+    title: "Verified Seeker invite",
+    description: "A shared invite works only after the tester proves current Seeker Genesis Token ownership.",
     icon: ShieldCheck,
   },
 ];
@@ -89,7 +89,7 @@ export function AccessPolicyFields({
       ? ["Claims the invite", "Links a wallet", "Verifies Seeker ownership", "Downloads the APK"]
       : preset === "group"
         ? ["Claims the group invite", "Receives a group place", "Downloads the APK"]
-        : ["Claims the invite", "Receives an eligible FCFS place", "Downloads the APK"];
+        : ["Claims the invite", "Receives an eligible tester place", "Downloads the APK"];
 
   return (
     <div className="grid min-w-0 gap-6">
@@ -186,7 +186,7 @@ export function AccessPolicyFields({
         <p className="mt-3 text-xs leading-5 text-muted-foreground">
           {preset === "wallet"
             ? "Share your tester dashboard URL. The release appears only after an allowed wallet is linked."
-            : "After publishing, create an invite link. Its Max uses value is the FCFS seat limit; ineligible wallet or SGT claims do not receive a place."}
+            : "After publishing, create an invite link and choose its Tester limit. Ineligible wallet or SGT claims do not consume a tester place."}
         </p>
       </div>
 
@@ -197,15 +197,15 @@ export function AccessPolicyFields({
           onChange={setRequireInvite}
           disabled
           label="Require an invite link"
-          help="Enabled for FCFS, group, and Seeker presets. The invite's Max uses value controls how many eligible places are granted."
+          help="Enabled for limited-link, group, and Seeker presets. You choose the number of eligible testers later, when creating the share link."
         />
         <PolicyCheckbox
           name="requireLinkedWallet"
           checked={requireWallet}
           onChange={setRequireWallet}
           disabled={preset === "wallet" || preset === "seeker"}
-          label="Require a Solana wallet"
-          help="Adds wallet proof to the release. It is automatically required by wallet allowlists and verified Seeker access."
+          label="Require wallet verification"
+          help="The tester must connect a compatible Solana wallet and sign a challenge to prove control. Merely having Phantom, Solflare, or Seed Vault installed is not enough."
         />
         <PolicyCheckbox
           name="requireVerifiedSeeker"
@@ -229,8 +229,8 @@ export function AccessPolicyFields({
           name="allowPreviousReleases"
           checked={allowPrevious}
           onChange={setAllowPrevious}
-          label="Allow previous builds"
-          help="Lets an eligible tester browse and download earlier published versions of this app."
+          label="Let testers access older versions"
+          help="Lets an eligible tester browse earlier published builds of this app. It does not grant access to future releases, which keep their own access rules."
         />
       </div>
     </div>

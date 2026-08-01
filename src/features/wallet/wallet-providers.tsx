@@ -1,36 +1,47 @@
 "use client";
 
-import { useMemo } from "react";
 import { ConnectionProvider, WalletProvider } from "@solana/wallet-adapter-react";
+import type { Adapter } from "@solana/wallet-adapter-base";
 import { WalletModalProvider } from "@solana/wallet-adapter-react-ui";
 import {
-  createDefaultAddressSelector,
-  createDefaultAuthorizationResultCache,
+  createDefaultAuthorizationCache,
+  createDefaultChainSelector,
   createDefaultWalletNotFoundHandler,
-  SolanaMobileWalletAdapter,
-} from "@solana-mobile/wallet-adapter-mobile";
-import { WalletAdapterNetwork } from "@solana/wallet-adapter-base";
+  registerMwa,
+} from "@solana-mobile/wallet-standard-mobile";
 import { getClientEnv } from "@/src/lib/env";
+
+let mobileWalletRegistered = false;
+
+function registerMobileWallet(appOrigin: string) {
+  if (mobileWalletRegistered || typeof window === "undefined") return;
+
+  registerMwa({
+    appIdentity: {
+      name: "SeekerHub",
+      uri: appOrigin,
+      icon: "/favicon.ico",
+    },
+    authorizationCache: createDefaultAuthorizationCache(),
+    chains: ["solana:mainnet"],
+    chainSelector: createDefaultChainSelector(),
+    onWalletNotFound: createDefaultWalletNotFoundHandler(),
+  });
+  mobileWalletRegistered = true;
+}
+
+const configuredWalletAdapters: Adapter[] = [];
+
+if (typeof window !== "undefined") {
+  registerMobileWallet(window.location.origin);
+}
 
 export function WalletProviders({ children }: { children: React.ReactNode }) {
   const env = getClientEnv();
-  const appOrigin = typeof window === "undefined" ? env.NEXT_PUBLIC_APP_URL : window.location.origin;
-  const wallets = useMemo(
-    () => [
-      new SolanaMobileWalletAdapter({
-        addressSelector: createDefaultAddressSelector(),
-        appIdentity: { name: "SeekerHub", uri: appOrigin, icon: `${appOrigin}/favicon.ico` },
-        authorizationResultCache: createDefaultAuthorizationResultCache(),
-        cluster: WalletAdapterNetwork.Mainnet,
-        onWalletNotFound: createDefaultWalletNotFoundHandler(),
-      }),
-    ],
-    [appOrigin],
-  );
 
   return (
     <ConnectionProvider endpoint={env.NEXT_PUBLIC_SOLANA_RPC_URL}>
-      <WalletProvider wallets={wallets} autoConnect>
+      <WalletProvider wallets={configuredWalletAdapters} autoConnect>
         <WalletModalProvider>{children}</WalletModalProvider>
       </WalletProvider>
     </ConnectionProvider>

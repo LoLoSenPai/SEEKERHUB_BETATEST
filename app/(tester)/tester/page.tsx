@@ -31,6 +31,7 @@ export default async function TesterDashboardPage() {
       title="Your beta apps"
       subtitle="Open a build, install the APK, and send feedback to its builder."
       canBuild={canBuild}
+      isGuest={Boolean(session.user.isAnonymous)}
       identityLabel={session.user.isAnonymous ? "Guest tester" : session.user.email}
     >
       <div className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">

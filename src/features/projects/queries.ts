@@ -148,7 +148,13 @@ export async function getReleaseForOwner(slug: string, releaseId: string, userId
       },
     },
     include: {
-      project: { include: { testerGroups: { orderBy: { name: "asc" } } } },
+      project: {
+        include: {
+          testerGroups: { orderBy: { name: "asc" } },
+          releases: { where: { deletedAt: null }, select: { id: true } },
+          inviteLinks: { select: { id: true } },
+        },
+      },
       buildAsset: true,
       accessPolicy: {
         include: {

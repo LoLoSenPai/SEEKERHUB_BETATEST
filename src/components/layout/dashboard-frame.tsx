@@ -23,6 +23,7 @@ export function DashboardFrame({
   title,
   subtitle,
   canBuild = false,
+  isGuest = false,
   identityLabel = "Signed in",
   children,
 }: {
@@ -31,6 +32,7 @@ export function DashboardFrame({
   title: string;
   subtitle: string;
   canBuild?: boolean;
+  isGuest?: boolean;
   identityLabel?: string;
   children: React.ReactNode;
 }) {
@@ -57,7 +59,11 @@ export function DashboardFrame({
             <div className="flex min-w-0 max-w-full items-center rounded-full border border-border bg-card p-1 pl-3 shadow-sm">
               <CircleUserRound className="size-4 shrink-0 text-success" aria-hidden="true" />
               <span className="min-w-0 truncate px-2 text-xs font-semibold" title={identityLabel}>{identityLabel}</span>
-              <SignOutButton />
+              {isGuest ? (
+                <span className="hidden border-l border-border px-3 text-xs text-muted-foreground sm:inline">Saved in this browser</span>
+              ) : (
+                <SignOutButton />
+              )}
             </div>
           </div>
         </div>

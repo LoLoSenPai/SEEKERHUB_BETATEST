@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { format } from "date-fns";
 import { DashboardFrame } from "@/src/components/layout/dashboard-frame";
+import { BuilderJourney } from "@/src/components/layout/builder-journey";
 import { Badge } from "@/src/components/ui/badge";
 import { buttonVariants } from "@/src/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/src/components/ui/card";
@@ -37,6 +38,13 @@ export default async function BuilderReleaseDetailPage({
       subtitle="Release metadata, access policy, and the first analytics loop in one view."
       identityLabel={session.user.email}
     >
+      <BuilderJourney
+        projectSlug={release.project.slug}
+        current={release.project.inviteLinks.length ? "review" : "invite"}
+        releaseCount={release.project.releases.length}
+        inviteCount={release.project.inviteLinks.length}
+        downloadCount={release.downloadEvents.length}
+      />
       <Card className="mb-6 rounded-[1.75rem] border-brand/25 bg-brand/5">
         <CardContent className="grid gap-4 p-5 sm:grid-cols-3">
           <Link href={`/builder/apps/${release.project.slug}`} className={cn(buttonVariants({ variant: "secondary" }), "justify-center")}>Back to app</Link>
@@ -104,7 +112,7 @@ export default async function BuilderReleaseDetailPage({
       <div className="mt-6 grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
         <Card className="rounded-[1.75rem]">
           <CardHeader>
-            <CardTitle>MVP analytics</CardTitle>
+            <CardTitle>Beta analytics</CardTitle>
             <CardDescription>Simple but structured funnel counts for the beta lifecycle.</CardDescription>
           </CardHeader>
           <CardContent className="grid gap-3 text-sm text-foreground">

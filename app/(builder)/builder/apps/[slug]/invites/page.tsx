@@ -1,6 +1,7 @@
 import { format } from "date-fns";
 import { notFound } from "next/navigation";
 import { DashboardFrame } from "@/src/components/layout/dashboard-frame";
+import { BuilderJourney } from "@/src/components/layout/builder-journey";
 import { Badge } from "@/src/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/src/components/ui/card";
 import { FieldLabel } from "@/src/components/ui/field-help";
@@ -66,12 +67,19 @@ export default async function InvitesPage({
       kind="builder"
       currentPath="/builder"
       title={`${project.name} invite links`}
-      subtitle="Create a shareable link and control which eligible testers receive a place."
+      subtitle="Create a shareable link, set its tester limit, and decide which release or group it unlocks."
       identityLabel={session.user.email}
     >
+      <BuilderJourney
+        projectSlug={project.slug}
+        current="invite"
+        releaseCount={project.releases.length}
+        inviteCount={project.inviteLinks.length}
+        downloadCount={project.releases.reduce((total, release) => total + release.downloadEvents.length, 0)}
+      />
       <Card className="mb-6 rounded-[1.75rem] border-brand/25 bg-brand/5">
         <CardContent className="grid gap-4 p-5 md:grid-cols-3">
-          <div><div className="font-semibold">Open FCFS</div><p className="mt-1 text-sm leading-6 text-muted-foreground">Set Max uses. The first eligible testers receive places.</p></div>
+          <div><div className="font-semibold">Limited tester link</div><p className="mt-1 text-sm leading-6 text-muted-foreground">Set a Tester limit. Only eligible claims consume one of those places.</p></div>
           <div><div className="font-semibold">One release only</div><p className="mt-1 text-sm leading-6 text-muted-foreground">Select a release when the link must not unlock later builds.</p></div>
           <div><div className="font-semibold">Controlled cohort</div><p className="mt-1 text-sm leading-6 text-muted-foreground">Select a tester group when access should follow a reusable team.</p></div>
         </CardContent>
@@ -80,7 +88,7 @@ export default async function InvitesPage({
         <Card className="rounded-[1.75rem]">
           <CardHeader>
             <CardTitle>Create invite link</CardTitle>
-            <CardDescription>Scope a link to the project, a release, or a tester group. Sharing stays manual in v1.</CardDescription>
+            <CardDescription>Choose what the link unlocks, how many eligible testers it accepts, and when it expires.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-5">
             {generatedLink ? (
@@ -126,7 +134,13 @@ export default async function InvitesPage({
               </div>
               <div className="grid gap-5 lg:grid-cols-2">
                 <div className="grid gap-2">
-                  <FieldLabel htmlFor="maxUses" helpTitle="FCFS place limit" help="Counts granted eligible places, not raw clicks or ineligible claims. Leave empty for no seat limit.">Max uses</FieldLabel>
+                  <FieldLabel
+                    htmlFor="maxUses"
+                    helpTitle="Tester limit"
+                    help="Counts eligible tester identities that receive access, not raw link opens. Guest sessions are browser-based; require an email, wallet, or SGT when the limit must map to a durable identity. Leave empty for no limit."
+                  >
+                    Tester limit
+                  </FieldLabel>
                   <Input id="maxUses" name="maxUses" type="number" min={1} placeholder="10" />
                 </div>
                 <InviteExpiryField />
@@ -177,9 +191,9 @@ export default async function InvitesPage({
                     )}
                   </div>
                   <div className="mt-3 grid gap-2 text-sm text-muted-foreground">
-                    <div>{invite.acceptedClaims} link claims</div>
-                    <div>{invite.grantedSeats} eligible places granted</div>
-                    <div>Place limit: {invite.maxUses ?? "Unlimited"}</div>
+                    <div>{invite.acceptedClaims} tester sessions claimed this link</div>
+                    <div>{invite.grantedSeats} eligible testers granted access</div>
+                    <div>Tester limit: {invite.maxUses ?? "Unlimited"}</div>
                     <div>Expires: {invite.expiresAt ? format(invite.expiresAt, "PPP p") : "Never"}</div>
                     {invite.revokedAt ? <div>Revoked: {format(invite.revokedAt, "PPP p")}</div> : null}
                   </div>

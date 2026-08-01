@@ -51,10 +51,10 @@ export function AccessPolicySummary({
       <CardContent className="space-y-4">
         <div className="flex flex-wrap gap-2">
           <StatusBadge enabled={policy.requireInviteAcceptance} enabledLabel="Invite required" disabledLabel="No invite required" />
-          <StatusBadge enabled={policy.requireLinkedWallet} enabledLabel="Wallet required" disabledLabel="Wallet optional" />
+          <StatusBadge enabled={policy.requireLinkedWallet} enabledLabel="Wallet signature required" disabledLabel="Wallet optional" />
           <StatusBadge enabled={policy.requireSolanaMobile} enabledLabel="Solana Mobile recommended" disabledLabel="Any device" />
           <StatusBadge enabled={policy.requireVerifiedSeeker} enabledLabel="Verified Seeker required" disabledLabel="Seeker optional" />
-          <StatusBadge enabled={policy.allowPreviousReleases} enabledLabel="Previous builds visible" disabledLabel="Current build only" />
+          <StatusBadge enabled={policy.allowPreviousReleases} enabledLabel="Older versions visible" disabledLabel="Current version only" />
         </div>
 
         <div className="grid gap-3 text-sm text-foreground">

@@ -7,6 +7,7 @@ import { authClient } from "@/src/lib/auth-client";
 import { Button } from "@/src/components/ui/button";
 import { Input } from "@/src/components/ui/input";
 import { Label } from "@/src/components/ui/label";
+import { PasswordInput } from "@/src/components/ui/password-input";
 
 export function VerificationResendForm({ initialEmail, returnTo }: { initialEmail?: string; returnTo: string }) {
   const [pending, setPending] = useState(false);
@@ -61,7 +62,7 @@ export function ResetPasswordForm({ token }: { token?: string }) {
       router.push("/sign-in?intent=builder");
     }}>
       <Label htmlFor="new-password">New password</Label>
-      <Input id="new-password" name="password" type="password" minLength={8} required />
+      <PasswordInput id="new-password" name="password" autoComplete="new-password" minLength={8} required />
       <Button disabled={pending || !token}>{pending ? "Updating..." : "Update password"}</Button>
       {!token ? <p className="text-sm text-danger">This reset link is incomplete or expired.</p> : null}
     </form>

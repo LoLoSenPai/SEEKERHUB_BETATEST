@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { DashboardFrame } from "@/src/components/layout/dashboard-frame";
+import { BuilderJourney } from "@/src/components/layout/builder-journey";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/src/components/ui/card";
 import { FieldLabel } from "@/src/components/ui/field-help";
 import { Input } from "@/src/components/ui/input";
@@ -32,6 +33,13 @@ export default async function GroupsPage({ params }: { params: Promise<{ slug: s
       subtitle="Build reusable cohorts such as internal QA, creators, or community testers."
       identityLabel={session.user.email}
     >
+      <BuilderJourney
+        projectSlug={project.slug}
+        current="invite"
+        releaseCount={project.releases.length}
+        inviteCount={project.inviteLinks.length}
+        downloadCount={project.releases.reduce((total, release) => total + release.downloadEvents.length, 0)}
+      />
       <div className="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
         <Card className="rounded-[1.75rem]">
           <CardHeader>

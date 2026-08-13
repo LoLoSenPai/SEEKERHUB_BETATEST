@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { parseEnvBoolean } from "@/src/lib/env";
 import { isTransactionConflict, isUniqueConstraintError } from "@/src/lib/prisma-errors";
 import { safeReturnTo } from "@/src/lib/redirect";
-import { accessPolicyInputSchema, deviceContextInputSchema } from "@/src/lib/validation";
+import { accessPolicyInputSchema, createUploadSessionSchema, deviceContextInputSchema } from "@/src/lib/validation";
 
 const validAddress = "GT2zuHVaZQYZSyQMgJPLzvkmyztfyXg2NJunqFp4p3A4";
 
@@ -34,6 +34,24 @@ describe("public beta hardening helpers", () => {
       hasMobileWalletAdapterContext: true,
       recognitionSource: "VERIFIED_WALLET_SGT",
     })).toThrow();
+  });
+
+  it("lets the builder quota decide whether a 450 MiB APK is allowed", () => {
+    const parsed = createUploadSessionSchema.parse({
+      projectId: "cm12345678901234567890123",
+      fileName: "app-release.apk",
+      contentType: "application/vnd.android.package-archive",
+      fileSize: 450 * 1024 * 1024,
+      draft: {
+        projectId: "cm12345678901234567890123",
+        versionName: "manifest-source-of-truth",
+        versionCode: 1,
+        changelog: "Large beta build",
+        accessPolicy: {},
+      },
+    });
+
+    expect(parsed.fileSize).toBe(450 * 1024 * 1024);
   });
 
   it("allows only local return paths", () => {

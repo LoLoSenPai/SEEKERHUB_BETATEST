@@ -1,7 +1,9 @@
 import { z } from "zod";
 import { PublicKey } from "@solana/web3.js";
 
-const MAX_APK_BYTES = 250 * 1024 * 1024;
+// This is only a technical request ceiling. The builder profile quota is
+// enforced transactionally by reserveUploadQuota before an upload URL exists.
+const MAX_UPLOAD_REQUEST_BYTES = 5 * 1024 * 1024 * 1024;
 
 function isSolanaAddress(value: string) {
   try {
@@ -111,7 +113,7 @@ export const createUploadSessionSchema = z.object({
   projectId: z.string().cuid(),
   fileName: z.string().min(1),
   contentType: z.string().min(1),
-  fileSize: z.coerce.number().int().positive().max(MAX_APK_BYTES),
+  fileSize: z.coerce.number().int().positive().max(MAX_UPLOAD_REQUEST_BYTES),
   draft: releaseDraftInputSchema,
 });
 

@@ -33,6 +33,7 @@ export default async function NewReleasePage({ params }: { params: Promise<{ slu
         projectId={project.id}
         projectSlug={project.slug}
         groups={project.testerGroups.map((group) => ({ id: group.id, name: group.name }))}
+        maxApkBytes={Number(session.builderProfile.maxApkBytes)}
       />
     </DashboardFrame>
   );

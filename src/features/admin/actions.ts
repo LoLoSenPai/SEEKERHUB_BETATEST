@@ -24,14 +24,21 @@ export async function updateBuilderQuotaAction(formData: FormData) {
   const profileId = String(formData.get("profileId"));
   const maxProjects = Number(formData.get("maxProjects"));
   const maxStoredReleases = Number(formData.get("maxStoredReleases"));
+  const maxApkMiB = Number(formData.get("maxApkMiB"));
   const maxStorageMiB = Number(formData.get("maxStorageMiB"));
-  if (![maxProjects, maxStoredReleases, maxStorageMiB].every(Number.isSafeInteger)) throw new Error("Quota values must be integers.");
-  if (maxProjects < 0 || maxProjects > 100 || maxStoredReleases < 0 || maxStoredReleases > 1_000 || maxStorageMiB < 0 || maxStorageMiB > 102_400) throw new Error("Quota value outside the allowed admin range.");
+  if (![maxProjects, maxStoredReleases, maxApkMiB, maxStorageMiB].every(Number.isSafeInteger)) throw new Error("Quota values must be integers.");
+  if (maxProjects < 0 || maxProjects > 100 || maxStoredReleases < 0 || maxStoredReleases > 1_000 || maxApkMiB < 0 || maxApkMiB > 5_120 || maxStorageMiB < 0 || maxStorageMiB > 102_400) throw new Error("Quota value outside the allowed admin range.");
+  if (maxApkMiB > maxStorageMiB) throw new Error("The per-APK limit cannot exceed the total storage quota.");
   await prisma.builderProfile.update({
     where: { id: profileId },
-    data: { maxProjects, maxStoredReleases, maxStorageBytes: BigInt(maxStorageMiB) * 1024n * 1024n },
+    data: {
+      maxProjects,
+      maxStoredReleases,
+      maxApkBytes: BigInt(maxApkMiB) * 1024n * 1024n,
+      maxStorageBytes: BigInt(maxStorageMiB) * 1024n * 1024n,
+    },
   });
-  await prisma.auditLog.create({ data: { actorUserId: admin.user.id, action: "builder.quota_updated", targetType: "BuilderProfile", targetId: profileId, metadataJson: { maxProjects, maxStoredReleases, maxStorageMiB } } });
+  await prisma.auditLog.create({ data: { actorUserId: admin.user.id, action: "builder.quota_updated", targetType: "BuilderProfile", targetId: profileId, metadataJson: { maxProjects, maxStoredReleases, maxApkMiB, maxStorageMiB } } });
   revalidatePath("/admin");
 }
 

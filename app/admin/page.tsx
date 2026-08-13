@@ -73,14 +73,27 @@ export default async function AdminPage() {
                   </form>
                 </div>
                 <div className="mt-3 text-sm text-muted-foreground">
-                  Used {formatBytes(profile.usedStorageBytes)} / reserved {formatBytes(profile.reservedStorageBytes)} / limit {formatBytes(profile.maxStorageBytes)}
+                  Used {formatBytes(profile.usedStorageBytes)} / reserved {formatBytes(profile.reservedStorageBytes)} / total limit {formatBytes(profile.maxStorageBytes)} / per APK {formatBytes(profile.maxApkBytes)}
                 </div>
-                <form action={updateBuilderQuotaAction} className="mt-3 grid gap-2 sm:grid-cols-4">
+                <form action={updateBuilderQuotaAction} className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
                   <input type="hidden" name="profileId" value={profile.id} />
-                  <Input name="maxProjects" type="number" min="0" defaultValue={profile.maxProjects} aria-label="Project quota" />
-                  <Input name="maxStoredReleases" type="number" min="0" defaultValue={profile.maxStoredReleases} aria-label="Release quota" />
-                  <Input name="maxStorageMiB" type="number" min="0" defaultValue={Number(profile.maxStorageBytes / 1024n / 1024n)} aria-label="Storage quota MiB" />
-                  <PendingSubmitButton variant="secondary" idleLabel="Save quotas" pendingLabel="Saving..." />
+                  <label className="grid gap-1 text-xs font-medium text-muted-foreground">
+                    Projects
+                    <Input name="maxProjects" type="number" min="0" max="100" defaultValue={profile.maxProjects} aria-label="Project quota" />
+                  </label>
+                  <label className="grid gap-1 text-xs font-medium text-muted-foreground">
+                    Stored releases
+                    <Input name="maxStoredReleases" type="number" min="0" max="1000" defaultValue={profile.maxStoredReleases} aria-label="Release quota" />
+                  </label>
+                  <label className="grid gap-1 text-xs font-medium text-muted-foreground">
+                    Max APK (MiB)
+                    <Input name="maxApkMiB" type="number" min="0" max="5120" defaultValue={Number(profile.maxApkBytes / 1024n / 1024n)} aria-label="Maximum APK size MiB" />
+                  </label>
+                  <label className="grid gap-1 text-xs font-medium text-muted-foreground">
+                    Total storage (MiB)
+                    <Input name="maxStorageMiB" type="number" min="0" max="102400" defaultValue={Number(profile.maxStorageBytes / 1024n / 1024n)} aria-label="Storage quota MiB" />
+                  </label>
+                  <PendingSubmitButton className="self-end" variant="secondary" idleLabel="Save quotas" pendingLabel="Saving..." />
                 </form>
               </div>
             ))}

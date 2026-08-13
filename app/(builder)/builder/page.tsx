@@ -85,7 +85,7 @@ export default async function BuilderDashboardPage() {
             )}
           </CardContent>
         </Card>
-        <Card className="rounded-[1.75rem]"><CardHeader><CardTitle>Builder quota</CardTitle><CardDescription>Trash continues counting until the storage deletion job completes.</CardDescription></CardHeader><CardContent className="grid gap-2 text-sm text-muted-foreground sm:grid-cols-3"><div>{stats.retainedProjectCount} / {session.builderProfile.maxProjects} projects</div><div>{stats.retainedReleaseCount} / {session.builderProfile.maxStoredReleases} retained releases</div><div>{formatBytes(session.builderProfile.usedStorageBytes + session.builderProfile.reservedStorageBytes)} / {formatBytes(session.builderProfile.maxStorageBytes)} storage</div></CardContent></Card>
+        <Card className="rounded-[1.75rem]"><CardHeader><CardTitle>Builder quota</CardTitle><CardDescription>Trash continues counting until the storage deletion job completes.</CardDescription></CardHeader><CardContent className="grid gap-2 text-sm text-muted-foreground sm:grid-cols-2 xl:grid-cols-4"><div>{stats.retainedProjectCount} / {session.builderProfile.maxProjects} projects</div><div>{stats.retainedReleaseCount} / {session.builderProfile.maxStoredReleases} retained releases</div><div>{formatBytes(session.builderProfile.maxApkBytes)} maximum per APK</div><div>{formatBytes(session.builderProfile.usedStorageBytes + session.builderProfile.reservedStorageBytes)} / {formatBytes(session.builderProfile.maxStorageBytes)} storage</div></CardContent></Card>
       </div>
     </DashboardFrame>
   );

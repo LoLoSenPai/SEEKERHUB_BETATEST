@@ -10,6 +10,7 @@ import { Label } from "@/src/components/ui/label";
 import { FieldLabel } from "@/src/components/ui/field-help";
 import { Textarea } from "@/src/components/ui/textarea";
 import { AccessPolicyFields } from "@/src/features/releases/access-policy-fields";
+import { formatBytes } from "@/src/lib/utils";
 
 type GroupOption = {
   id: string;
@@ -20,10 +21,12 @@ export function ReleaseUploadForm({
   projectId,
   projectSlug,
   groups,
+  maxApkBytes,
 }: {
   projectId: string;
   projectSlug: string;
   groups: GroupOption[];
+  maxApkBytes: number;
 }) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
@@ -57,6 +60,12 @@ export function ReleaseUploadForm({
 
             if (!file) {
               setError("Select an APK file first.");
+              setLoading(false);
+              return;
+            }
+
+            if (file.size > maxApkBytes) {
+              setError(`This APK is ${formatBytes(file.size)}. Your current per-APK limit is ${formatBytes(maxApkBytes)}.`);
               setLoading(false);
               return;
             }
@@ -168,7 +177,7 @@ export function ReleaseUploadForm({
                 helpTitle="Signed release APK"
                 help="Upload the .apk produced by your release build, for example app-release.apk. SeekerHub checks its archive, manifest, size, checksum, and APK signature marker."
               >
-                Signed APK (max 250 MiB)
+                Signed APK (max {formatBytes(maxApkBytes)})
               </FieldLabel>
               <Input id="apk" name="apk" type="file" accept=".apk,application/vnd.android.package-archive,application/octet-stream" required />
             </div>

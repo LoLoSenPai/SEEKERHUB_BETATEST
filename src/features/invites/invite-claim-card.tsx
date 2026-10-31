@@ -109,7 +109,7 @@ export function InviteClaimCard({
           {seekerRequired ? " Seeker Genesis Token verification is also required before download." : seekerRecommended ? " Some builds also require Seeker Genesis Token verification." : ""}
           {seekerRecommended ? " If needed, SGT verification is a separate signature after sign-in, valid for 24 hours. It does not prove hardware trust." : ""}
         </div> : null}
-        <ContinueWithWallet action={walletAction} disabled={loading || navigating} showSeekerConnect={seekerRecommended || seekerRequired}
+        <ContinueWithWallet action={walletAction} disabled={loading || navigating}
           onChoose={() => { setWalletChosen(true); setError(null); }} onAuthenticated={claim} />
         {!currentIdentity && !walletRequired && walletChosen ? <Button type="button" variant="ghost" disabled={walletAction.pending || loading || navigating}
           onClick={() => setWalletChosen(false)}>Choose guest access instead</Button> : null}

@@ -76,7 +76,9 @@ describe("wallet UI", () => {
   it("connects before offering a sign action", () => {
     mocks.wallet.connected = false;
     const markup = renderToStaticMarkup(createElement(ContinueWithWallet, { action: action() }));
-    expect(markup).toContain("Choose a wallet first");
+    expect(markup).toContain("Connect your wallet");
+    expect(markup).not.toContain("Use Seeker Connect");
+    expect(markup).not.toContain("Choose another wallet");
     expect(mocks.buttons).toHaveLength(0);
   });
 
@@ -198,6 +200,7 @@ describe("wallet UI", () => {
       id: "w", address: "wallet-address", isPrimary: true, seekerGenesisVerificationExpiresAt: new Date(Date.now() + 60_000),
     }] }));
     expect(button("SGT already verified (24h)").disabled).toBe(true);
+    expect(markup).not.toContain("Continue with wallet");
     expect(markup).toContain("does not prove device hardware trust");
   });
 
@@ -206,5 +209,14 @@ describe("wallet UI", () => {
       id: "w", address: "wallet-address", isPrimary: true, seekerGenesisVerificationExpiresAt: new Date(0),
     }] }));
     expect(button("Verify Seeker Genesis Token").disabled).toBe(false);
+    expect(mocks.buttons.some((props) => props.children === "Continue with wallet")).toBe(false);
+  });
+
+  it("still requires authentication when the connected wallet differs from the account wallet", () => {
+    renderToStaticMarkup(createElement(WalletLinkCard, { linkedWallets: [{
+      id: "w", address: "different-address", isPrimary: true, seekerGenesisVerificationExpiresAt: null,
+    }], requiredSeeker: true }));
+    expect(button("Continue with wallet").disabled).toBe(false);
+    expect(button("Verify Seeker Genesis Token").disabled).toBe(true);
   });
 });

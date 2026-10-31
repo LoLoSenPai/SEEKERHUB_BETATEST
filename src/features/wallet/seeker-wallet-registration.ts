@@ -2,8 +2,8 @@ import { registerSeekerConnect } from "@solana-mobile/seeker-connect-wallet-stan
 
 let registered = false;
 
-export function registerSeekerWallet(relayDomain: string) {
-  if (registered || !relayDomain || typeof window === "undefined" || window.location.protocol !== "https:") return;
+export function registerSeekerWallet(relayDomain: string, enabled = false) {
+  if (!enabled || registered || !relayDomain || typeof window === "undefined" || window.location.protocol !== "https:") return;
   registerSeekerConnect({
     identity: { name: "SeekerHub", uri: window.location.origin, icon: "/favicon.ico" },
     relayDomain,

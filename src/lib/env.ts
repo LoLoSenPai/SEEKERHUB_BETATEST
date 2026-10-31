@@ -53,6 +53,7 @@ const serverEnvSchema = z.object({
 const clientEnvSchema = z.object({
   NEXT_PUBLIC_APP_URL: z.string().url(),
   NEXT_PUBLIC_SOLANA_RPC_URL: z.string().url(),
+  NEXT_PUBLIC_ENABLE_SEEKER_CONNECT: z.boolean(),
   NEXT_PUBLIC_SEEKER_RELAY_DOMAIN: z.string().regex(/^(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}$/i).or(z.literal("")),
 });
 
@@ -72,7 +73,8 @@ const clientEnvCache: ClientEnv = clientEnvSchema.parse({
     process.env.NEXT_PUBLIC_SOLANA_RPC_URL,
     DEFAULT_SOLANA_RPC_URL,
   ),
-  // The operator accepted the Solana Mobile relay terms. Empty disables Seeker Connect.
+  // Explicit opt-in until certified App Links are validated on supported physical devices.
+  NEXT_PUBLIC_ENABLE_SEEKER_CONNECT: parseEnvBoolean(process.env.NEXT_PUBLIC_ENABLE_SEEKER_CONNECT, false),
   NEXT_PUBLIC_SEEKER_RELAY_DOMAIN: process.env.NEXT_PUBLIC_SEEKER_RELAY_DOMAIN ?? "relay.solanamobile.com",
 });
 

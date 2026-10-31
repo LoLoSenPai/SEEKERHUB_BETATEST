@@ -24,6 +24,7 @@ const env = {
   SOLANA_RPC_URL: "http://127.0.0.1:8899",
   NEXT_PUBLIC_SOLANA_RPC_URL: "http://127.0.0.1:8899",
   NEXT_PUBLIC_SEEKER_RELAY_DOMAIN: "",
+  NEXT_PUBLIC_ENABLE_SEEKER_CONNECT: "false",
   HELIUS_API_KEY: "",
   RESEND_API_KEY: "re_local_disabled",
   EMAIL_FROM: "SeekerHub QA <qa@example.test>",

@@ -41,6 +41,7 @@ jobs:
       SOLANA_RPC_URL: http://127.0.0.1:8899
       NEXT_PUBLIC_SOLANA_RPC_URL: http://127.0.0.1:8899
       NEXT_PUBLIC_SEEKER_RELAY_DOMAIN: ""
+      NEXT_PUBLIC_ENABLE_SEEKER_CONNECT: "false"
       RESEND_API_KEY: re_ci_only
       EMAIL_FROM: "SeekerHub CI <ci@example.com>"
       EMAIL_REPLY_TO: ci@example.com

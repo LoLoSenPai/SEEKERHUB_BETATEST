@@ -38,7 +38,8 @@ const configuredWalletAdapters: Adapter[] = [];
 
 if (typeof window !== "undefined") {
   registerMobileWallet(window.location.origin);
-  registerSeekerWallet(getClientEnv().NEXT_PUBLIC_SEEKER_RELAY_DOMAIN);
+  const env = getClientEnv();
+  registerSeekerWallet(env.NEXT_PUBLIC_SEEKER_RELAY_DOMAIN, env.NEXT_PUBLIC_ENABLE_SEEKER_CONNECT);
 }
 
 function handleWalletError(error: WalletError, adapter?: Adapter) {

@@ -195,7 +195,7 @@ test("explicit wallet sign-in gates SGT access and recovers one tester account a
     expect(await prisma.walletChallenge.count({ where: { address } })).toBe(0);
     expect(await prisma.inviteClaim.count({ where: { inviteLinkId: invite.id } })).toBe(0);
     // Exercise the mock's disconnect/change events as well as connect.
-    await first.page.getByRole("button", { name: /Disconnect$/ }).click();
+    await first.page.getByRole("button", { name: "Disconnect wallet", exact: true }).click();
     await expect(first.page.getByRole("button", { name: connectWalletLabel })).toBeVisible();
     await connectWallet(first.page);
     expect(first.mock.requests).toEqual([]);
@@ -295,14 +295,12 @@ test("explicit wallet sign-in gates SGT access and recovers one tester account a
   }
 });
 
-test("Android dedicated Seeker selector remains separate from sign-in and SGT proof", async ({ browser }, testInfo) => {
+test("Android has one wallet entry point, explicit signing, and separate SGT proof", async ({ browser }, testInfo) => {
   test.setTimeout(90_000);
   const { databaseUrl, baseUrl, bucket } = reviewEnvironment();
   const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
-  const seekerKeypair = nacl.sign.keyPair();
-  const genericKeypair = nacl.sign.keyPair();
-  const address = bs58.encode(seekerKeypair.publicKey);
-  const genericAddress = bs58.encode(genericKeypair.publicKey);
+  const keypair = nacl.sign.keyPair();
+  const address = bs58.encode(keypair.publicKey);
   const id = randomUUID();
   const token = `android-selector-${id}`;
   const pageErrors: string[] = [];
@@ -315,8 +313,7 @@ test("Android dedicated Seeker selector remains separate from sign-in and SGT pr
     context.on("page", (page) => page.on("pageerror", (error) => pageErrors.push(error.message)));
     // Registry names exercise UI selection only. This is NOT the native SDK,
     // Android App Link association, a relay connection, or an SGT attestation.
-    const seeker = await installWallet(context, seekerKeypair, "Seeker Connect");
-    const generic = await installWallet(context, genericKeypair);
+    const mobile = await installWallet(context, keypair, "Mobile Wallet Adapter");
     const owner = await prisma.user.create({ data: { name: "Android selector fixture owner", email: `android-owner-${id}@example.test` } });
     ownerId = owner.id;
     const project = await prisma.appProject.create({ data: { ownerId, slug: `android-selector-${id}`, name: "Android SGT selector fixture" } });
@@ -339,34 +336,35 @@ test("Android dedicated Seeker selector remains separate from sign-in and SGT pr
         { message: "Android wallet UI must fit the 390px viewport" }).toBe(true);
     };
     const noImplicitAuth = async () => {
-      expect(seeker.signedMessages).toHaveLength(0);
-      expect(generic.signedMessages).toHaveLength(0);
-      expect(seeker.requests).toEqual([]);
+      expect(mobile.signedMessages).toHaveLength(0);
+      expect(mobile.requests).toEqual([]);
       expect(await sessionUser(context, baseUrl)).toBeNull();
-      expect(await prisma.walletChallenge.count({ where: { address: { in: [address, genericAddress] } } })).toBe(0);
+      expect(await prisma.walletChallenge.count({ where: { address } })).toBe(0);
       expect(await prisma.inviteClaim.count({ where: { inviteLinkId: invite.id } })).toBe(0);
     };
 
     await page.goto(`${baseUrl}/invite/${token}`);
-    await expect(page.getByRole("button", { name: "Use Seeker Connect", exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Connect wallet", exact: true })).toHaveCount(1);
+    await expect(page.getByRole("button", { name: "Use Seeker Connect", exact: true })).toHaveCount(0);
     await expect(page.getByRole("button", { name: /guest/i })).toHaveCount(0);
-    await expect(page.getByRole("button", { name: "Choose another wallet", exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Choose another wallet", exact: true })).toHaveCount(0);
     await noOverflow();
-    await page.getByRole("button", { name: "Use Seeker Connect", exact: true }).click();
-    await expect(page.getByRole("button", { name: "Seeker Connect selected", exact: true })).toBeDisabled();
+    await page.getByRole("button", { name: "Connect wallet", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Disconnect wallet", exact: true })).toBeEnabled();
     await expect(page.getByRole("button", { name: "Continue with wallet", exact: true })).toBeEnabled();
     await noImplicitAuth();
     await noOverflow();
-    await page.screenshot({ path: testInfo.outputPath("android-seeker-selected-390.png"), fullPage: true });
+    await expect(page.locator(".wallet-adapter-modal")).toHaveCount(0);
+    await page.screenshot({ path: testInfo.outputPath("android-wallet-connected-390.png"), fullPage: true });
 
-    // The generic selector remains available on Android; do not exercise MWA.
-    await page.getByRole("button", { name: "Choose another wallet", exact: true }).click();
-    await page.getByRole("button", { name: new RegExp(walletName) }).click();
-    await expect(page.getByRole("button", { name: "Continue with wallet", exact: true })).toBeEnabled();
-    await expect(page.getByRole("button", { name: "Use Seeker Connect", exact: true })).toBeVisible();
+    // Disconnect/reconnect stays on the site and never signs a message implicitly.
+    await page.getByRole("button", { name: "Disconnect wallet", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Connect wallet", exact: true })).toBeEnabled();
+    await expect(page.getByRole("button", { name: "Continue with wallet", exact: true })).toHaveCount(0);
     await noImplicitAuth();
-    await page.getByRole("button", { name: "Use Seeker Connect", exact: true }).click();
-    await expect(page.getByRole("button", { name: "Seeker Connect selected", exact: true })).toBeDisabled();
+    await page.getByRole("button", { name: "Connect wallet", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Continue with wallet", exact: true })).toBeEnabled();
+    await expect(page).toHaveURL(`${baseUrl}/invite/${token}`);
     await noImplicitAuth();
 
     const user = await continueWithWallet(page);
@@ -374,9 +372,7 @@ test("Android dedicated Seeker selector remains separate from sign-in and SGT pr
     await expect(page).toHaveURL(`${baseUrl}/tester/releases/${release.id}`);
     expect(user.isAnonymous).toBe(false);
     expect((await sessionUser(context, baseUrl)).id).toBe(testerId);
-    expect(seeker.signedMessages).toHaveLength(1);
-    expect(generic.signedMessages).toHaveLength(0);
-    expect(await prisma.wallet.findUnique({ where: { address: genericAddress } })).toBeNull();
+    expect(mobile.signedMessages).toHaveLength(1);
     expect(await prisma.wallet.findUniqueOrThrow({ where: { address } })).toMatchObject({ userId: testerId,
       seekerGenesisVerifiedAt: null, seekerGenesisVerificationExpiresAt: null });
     expect(await prisma.builderProfile.findUnique({ where: { userId: testerId } })).toBeNull();
@@ -386,11 +382,13 @@ test("Android dedicated Seeker selector remains separate from sign-in and SGT pr
     expect((await context.request.get(`${baseUrl}/api/downloads/${release.id}`, { maxRedirects: 0 })).status()).toBe(403);
     expect(await prisma.inviteClaim.count({ where: { inviteLinkId: invite.id, grantedAt: { not: null } } })).toBe(0);
     // Display-name reads after authentication are not proof requests.
-    expect(seeker.requests.filter(({ path }) => path !== "/api/wallet/domain").map(({ path }) => path))
+    expect(mobile.requests.filter(({ path }) => path !== "/api/wallet/domain").map(({ path }) => path))
       .toEqual(["/api/wallet/challenge", "/api/auth/sign-in/solana-wallet"]);
-    expect(seeker.requests[0].body).toEqual({ address, purpose: "SIGN_IN" });
+    expect(mobile.requests[0].body).toEqual({ address, purpose: "SIGN_IN" });
     await expect(page.getByRole("button", { name: "Verify Seeker Genesis Token", exact: true })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Choose another wallet", exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Continue with wallet", exact: true })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Choose another wallet", exact: true })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Use Seeker Connect", exact: true })).toHaveCount(0);
     await noOverflow();
     await page.screenshot({ path: testInfo.outputPath("android-signin-not-sgt-390.png"), fullPage: true });
   } finally {
@@ -398,7 +396,7 @@ test("Android dedicated Seeker selector remains separate from sign-in and SGT pr
     await context.close();
     try {
       if (projectId) await prisma.appProject.deleteMany({ where: { id: projectId } });
-      await prisma.walletChallenge.deleteMany({ where: { address: { in: [address, genericAddress] } } });
+      await prisma.walletChallenge.deleteMany({ where: { address } });
       if (testerId) await prisma.user.deleteMany({ where: { id: testerId } });
       if (ownerId) await prisma.user.deleteMany({ where: { id: ownerId } });
     } finally {

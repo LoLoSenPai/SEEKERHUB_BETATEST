@@ -34,12 +34,13 @@ export function WalletLinkCard({ linkedWallets, requiredSeeker = false, showSeek
       <CardHeader>
         <CardTitle>Wallet access</CardTitle>
         <CardDescription>
-          Continue with your wallet to keep or recover tester access, including from another browser. Signing is not a payment.
-          {requiredSeeker ? " Then verify Seeker Genesis Token ownership below." : null}
+          {connectedLinkedWallet
+            ? requiredSeeker && !connectedSeekerVerified ? "Your wallet is linked. Verify Seeker Genesis Token ownership below to continue." : "Your connected wallet is linked to your tester account."
+            : "Connect and continue with your wallet to keep or recover tester access. Signing is not a payment."}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        <ContinueWithWallet action={action} showSeekerConnect={showSeeker} />
+        <ContinueWithWallet action={action} accountWalletConnected={Boolean(connectedLinkedWallet)} />
         <div className="rounded-[1.2rem] border border-border bg-muted/40 p-4">
           <div className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Account wallets</div>
           {linkedWallets.length ? <div className="mt-3 grid gap-3">
@@ -58,7 +59,7 @@ export function WalletLinkCard({ linkedWallets, requiredSeeker = false, showSeek
         </div>
         {showSeeker ? <div className="grid gap-3">
           <p className="text-xs leading-5 text-muted-foreground">SGT ownership is checked separately and is valid for 24 hours. It does not prove device hardware trust.</p>
-          <Button type="button" variant="secondary"
+          <Button type="button" variant={requiredSeeker ? "primary" : "secondary"}
             disabled={action.pending || !wallet.connected || !wallet.signMessage || !connectedLinkedWallet || connectedSeekerVerified}
             onClick={() => void action.run("VERIFY_SGT")}>
             {action.operation === "VERIFY_SGT" ? "Checking SGT ownership..." : connectedSeekerVerified ? "SGT already verified (24h)" : "Verify Seeker Genesis Token"}

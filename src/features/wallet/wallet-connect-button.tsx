@@ -8,19 +8,17 @@ import { SolanaMobileWalletAdapterWalletName } from "@solana-mobile/wallet-stand
 import { toast } from "sonner";
 import { Button } from "@/src/components/ui/button";
 import { getWalletErrorCode, getWalletErrorMessage } from "./wallet-error";
-import { WalletName } from "./wallet-name";
 
-export function WalletConnectButton({ disabled = false, secondary = false, onChoose }: { disabled?: boolean; secondary?: boolean; onChoose?: () => void }) {
-  const { connected, connecting, disconnecting, publicKey, wallet, wallets, connect, disconnect, select } = useWallet();
+export function WalletConnectButton({ disabled = false, onChoose }: { disabled?: boolean; onChoose?: () => void }) {
+  const { connected, connecting, disconnecting, wallet, wallets, connect, disconnect, select } = useWallet();
   const { setVisible } = useWalletModal();
   const mobileWallet = wallets.find(({ adapter }) => adapter.name === SolanaMobileWalletAdapterWalletName);
   const pending = connecting || disconnecting;
 
   return (
-    <div className="flex min-w-0 flex-wrap gap-2">
     <Button
       type="button"
-      variant={connected || secondary ? "secondary" : "primary"}
+      variant={connected ? "ghost" : "primary"}
       disabled={disabled || pending}
       onClick={async () => {
         try {
@@ -61,19 +59,7 @@ export function WalletConnectButton({ disabled = false, secondary = false, onCho
       ) : (
         <WalletCards className="size-4" aria-hidden="true" />
       )}
-      {pending ? "Connecting wallet..." : connected ? <>{publicKey ? <WalletName address={publicKey.toBase58()} showAddress={false} /> : null}<span>Disconnect</span></> : "Connect wallet"}
+      {disconnecting ? "Disconnecting wallet..." : connecting ? "Connecting wallet..." : connected ? "Disconnect wallet" : "Connect wallet"}
     </Button>
-    <Button type="button" variant="ghost" disabled={disabled || pending} onClick={async () => {
-      onChoose?.();
-      try {
-        // Let the old adapter finish its disconnect events before the picker selects a new one.
-        if (wallet) await disconnect();
-        setVisible(true);
-      } catch (error) {
-        const message = getWalletErrorMessage(error, "Unable to change wallets. Please try again.");
-        if (message) toast.error(message);
-      }
-    }}>Choose another wallet</Button>
-    </div>
   );
 }

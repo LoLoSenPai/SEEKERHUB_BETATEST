@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AlertCircle } from "lucide-react";
 import { authClient } from "@/src/lib/auth-client";
@@ -21,6 +21,7 @@ export function EmailAuthForm({
   returnTo: string;
 }) {
   const router = useRouter();
+  const inFlight = useRef(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const isTesterMagicLink = mode === "sign-in" && intent === "tester";
@@ -50,6 +51,8 @@ export function EmailAuthForm({
           className="grid gap-4"
           onSubmit={async (event) => {
             event.preventDefault();
+            if (inFlight.current) return;
+            inFlight.current = true;
             const formData = new FormData(event.currentTarget);
             const name = String(formData.get("name") ?? "");
             const email = String(formData.get("email") ?? "").trim();
@@ -83,7 +86,7 @@ export function EmailAuthForm({
               }
             } catch (caught) {
               setError(caught instanceof Error ? caught.message : "Unable to contact the authentication service.");
-            } finally {
+              inFlight.current = false;
               setLoading(false);
             }
           }}
@@ -91,12 +94,12 @@ export function EmailAuthForm({
           {mode === "sign-up" ? (
             <div className="grid gap-2">
               <Label htmlFor="name">Name</Label>
-              <Input id="name" name="name" autoComplete="name" placeholder="Studio or builder name" required />
+              <Input id="name" name="name" autoComplete="name" placeholder="Studio or builder name" required disabled={loading} />
             </div>
           ) : null}
           <div className="grid gap-2">
             <Label htmlFor="email">Email</Label>
-            <Input id="email" name="email" type="email" autoComplete="email" placeholder="you@example.com" required />
+            <Input id="email" name="email" type="email" autoComplete="email" placeholder="you@example.com" required disabled={loading} />
           </div>
           {!isTesterMagicLink ? (
             <div className="grid gap-2">
@@ -104,7 +107,7 @@ export function EmailAuthForm({
                 <Label htmlFor="password">Password</Label>
                 {mode === "sign-in" ? <Link href="/forgot-password" className="text-xs font-semibold text-muted-foreground hover:text-foreground">Forgot password?</Link> : null}
               </div>
-              <PasswordInput id="password" name="password" autoComplete={mode === "sign-in" ? "current-password" : "new-password"} minLength={8} required />
+              <PasswordInput id="password" name="password" autoComplete={mode === "sign-in" ? "current-password" : "new-password"} minLength={8} required disabled={loading} />
             </div>
           ) : null}
           <div aria-live="polite">

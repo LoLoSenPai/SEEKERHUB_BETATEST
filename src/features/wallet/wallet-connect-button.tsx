@@ -3,29 +3,33 @@
 import { Loader2, LogOut, WalletCards } from "lucide-react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useWalletModal } from "@solana/wallet-adapter-react-ui";
-import type { WalletName } from "@solana/wallet-adapter-base";
+import type { WalletName as AdapterWalletName } from "@solana/wallet-adapter-base";
 import { SolanaMobileWalletAdapterWalletName } from "@solana-mobile/wallet-standard-mobile";
 import { toast } from "sonner";
 import { Button } from "@/src/components/ui/button";
+import { getWalletErrorCode, getWalletErrorMessage } from "./wallet-error";
+import { WalletName } from "./wallet-name";
 
-export function WalletConnectButton() {
+export function WalletConnectButton({ disabled = false, secondary = false, onChoose }: { disabled?: boolean; secondary?: boolean; onChoose?: () => void }) {
   const { connected, connecting, disconnecting, publicKey, wallet, wallets, connect, disconnect, select } = useWallet();
   const { setVisible } = useWalletModal();
   const mobileWallet = wallets.find(({ adapter }) => adapter.name === SolanaMobileWalletAdapterWalletName);
   const pending = connecting || disconnecting;
-  const shortAddress = publicKey ? `${publicKey.toBase58().slice(0, 4)}...${publicKey.toBase58().slice(-4)}` : null;
 
   return (
+    <div className="flex min-w-0 flex-wrap gap-2">
     <Button
       type="button"
-      variant={connected ? "secondary" : "primary"}
-      disabled={pending}
+      variant={connected || secondary ? "secondary" : "primary"}
+      disabled={disabled || pending}
       onClick={async () => {
         try {
           if (connected) {
             await disconnect();
             return;
           }
+
+          onChoose?.();
 
           if (wallet?.adapter.name === SolanaMobileWalletAdapterWalletName) {
             await connect();
@@ -38,13 +42,15 @@ export function WalletConnectButton() {
             !/EdgA|OPR|SamsungBrowser/i.test(navigator.userAgent);
           if (isAndroidChrome && mobileWallet) {
             setVisible(false);
-            select(SolanaMobileWalletAdapterWalletName as WalletName);
+            select(SolanaMobileWalletAdapterWalletName as AdapterWalletName);
             return;
           }
 
           setVisible(true);
         } catch (error) {
-          toast.error(error instanceof Error ? error.message : "Wallet connection failed.");
+          if (getWalletErrorCode(error)) return;
+          const message = getWalletErrorMessage(error, "Wallet connection failed.");
+          if (message) toast.error(message);
         }
       }}
     >
@@ -55,7 +61,19 @@ export function WalletConnectButton() {
       ) : (
         <WalletCards className="size-4" aria-hidden="true" />
       )}
-      {pending ? "Connecting wallet..." : connected ? `${shortAddress} · Disconnect` : mobileWallet ? "Use installed wallet" : "Connect wallet"}
+      {pending ? "Connecting wallet..." : connected ? <>{publicKey ? <WalletName address={publicKey.toBase58()} showAddress={false} /> : null}<span>Disconnect</span></> : "Connect wallet"}
     </Button>
+    <Button type="button" variant="ghost" disabled={disabled || pending} onClick={async () => {
+      onChoose?.();
+      try {
+        // Let the old adapter finish its disconnect events before the picker selects a new one.
+        if (wallet) await disconnect();
+        setVisible(true);
+      } catch (error) {
+        const message = getWalletErrorMessage(error, "Unable to change wallets. Please try again.");
+        if (message) toast.error(message);
+      }
+    }}>Choose another wallet</Button>
+    </div>
   );
 }

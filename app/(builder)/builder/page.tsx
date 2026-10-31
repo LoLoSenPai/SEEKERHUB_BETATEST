@@ -52,7 +52,7 @@ export default async function BuilderDashboardPage() {
                       </p>
                     </div>
                     <div className="grid gap-2 text-right text-sm text-muted-foreground">
-                      <div>{project.releases.reduce((sum, release) => sum + release.downloadEvents.length, 0)} download links</div>
+                      <div>{project.releases.reduce((sum, release) => sum + release.downloadEvents.length, 0)} download links issued</div>
                       <div>{project.releases.reduce((sum, release) => sum + release.feedbackReports.length, 0)} feedback reports</div>
                       <div>{project.releases.reduce((sum, release) => sum + release.inviteLinks.length, 0)} invite links</div>
                     </div>
@@ -79,11 +79,22 @@ export default async function BuilderDashboardPage() {
         <div className="grid gap-4 xl:grid-cols-3 md:grid-cols-2">
           <StatCard label="Projects" value={stats.projectCount} hint="Builder-owned apps" />
           <StatCard label="Releases" value={stats.releaseCount} hint="Non-trashed releases, including drafts" />
-          <StatCard label="Claims" value={stats.claims} hint="Invite links accepted" />
-          <StatCard label="Granted places" value={stats.grantedPlaces} hint={`${stats.uniqueTesters} unique testers`} />
-          <StatCard label="Unique views" value={stats.uniqueViews} hint="Release pages opened" />
-          <StatCard label="Download links" value={stats.downloads} hint={`${stats.feedback} feedback reports`} />
+          <StatCard label="Invite claims" value={stats.claims} hint={`${stats.pendingClaims} waiting / ${stats.grantedPlaces} granted / ${stats.revokedClaims} revoked`} />
+          <StatCard label="Places used" value={stats.occupiedPlaces} hint={`${stats.uniqueTesters} testers with a non-revoked place`} />
+          <StatCard label="Account viewers" value={stats.viewers.accounts} hint="Unique email or wallet accounts" />
+          <StatCard label="Guest viewers" value={stats.viewers.guests} hint="Browser sessions, not unique people" />
+          <StatCard label="Download links issued" value={stats.downloads} hint="Repeat requests included; not confirmed installs" />
+          <StatCard label="Unique downloaders" value={stats.uniqueDownloaders} hint={`${stats.downloaders.accounts} email / wallet accounts; ${stats.downloaders.guests} guests`} />
+          <StatCard label="Feedback reports" value={stats.feedback} hint="Reports submitted across releases" />
         </div>
+        <details className="text-sm text-muted-foreground">
+          <summary className="cursor-pointer font-medium text-foreground">How these numbers work</summary>
+          <div className="mt-3 space-y-2 leading-6">
+            <p>Using the same email or wallet account counts once across releases, including recovered guest activity. Guests are browser identities, not phones or people. Signing out or clearing browser data can create a new guest.</p>
+            <p>A place is used per invitation claim. Revoked places still count toward the invitation limit. Wallet, group and SGT requirements are checked again before downloading.</p>
+            <p>Download links issued count requests, not completed downloads or installs. Activity from items in trash is included; events without an account are excluded from unique counts.</p>
+          </div>
+        </details>
 
         <Card className="rounded-[1.75rem]"><CardHeader><CardTitle>Builder quota</CardTitle><CardDescription>Trash continues counting until the storage deletion job completes.</CardDescription></CardHeader><CardContent className="grid gap-2 text-sm text-muted-foreground sm:grid-cols-2 xl:grid-cols-4"><div>{stats.retainedProjectCount} / {session.builderProfile.maxProjects} projects</div><div>{stats.retainedReleaseCount} / {session.builderProfile.maxStoredReleases} retained releases</div><div>{formatBytes(session.builderProfile.maxApkBytes)} maximum per APK</div><div>{formatBytes(session.builderProfile.usedStorageBytes + session.builderProfile.reservedStorageBytes)} / {formatBytes(session.builderProfile.maxStorageBytes)} storage</div></CardContent></Card>
       </div>

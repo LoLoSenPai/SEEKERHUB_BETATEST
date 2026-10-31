@@ -1,14 +1,24 @@
 import Link from "next/link";
 import { InviteClaimCard } from "@/src/features/invites/invite-claim-card";
-import { getInvitePreview } from "@/src/features/projects/queries";
+import { getInvitePreview, getTesterIdentity } from "@/src/features/projects/queries";
+import { WalletProviders } from "@/src/features/wallet/wallet-providers";
+import { getInviteWalletRequirements } from "@/src/features/wallet/invite-wallet-requirements";
+import { getSession } from "@/src/lib/session";
+import { getTesterIdentityLabel } from "@/src/lib/tester-identity";
 
 export default async function InvitePage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
-  const invite = await getInvitePreview(token);
+  const [invite, session] = await Promise.all([getInvitePreview(token), getSession()]);
 
   if (!invite) {
     return <main className="page-shell min-h-screen justify-center"><div className="mx-auto w-full max-w-lg rounded-[2rem] border border-border bg-surface p-6"><h1 className="text-2xl font-semibold">This invitation is unavailable</h1><p className="mt-3 text-sm leading-6 text-muted-foreground">The link may be invalid, expired or revoked. Ask the builder for a new invitation. If you already have access, try signing in to recover it.</p><Link href="/sign-in?intent=tester&returnTo=%2Ftester" className="mt-5 inline-block font-semibold hover:underline">Recover tester access</Link></div></main>;
   }
+
+  const requirements = getInviteWalletRequirements(invite.release
+    ? [invite.release.accessPolicy]
+    : invite.project.releases.map((release) => release.accessPolicy));
+  const tester = session && !session.user.isAnonymous ? await getTesterIdentity(session.user.id) : null;
+  const currentIdentity = tester ? getTesterIdentityLabel(tester) : null;
 
   return (
     <main className="relative min-h-screen overflow-hidden px-5 py-10">
@@ -25,7 +35,7 @@ export default async function InvitePage({ params }: { params: Promise<{ token: 
           </div>
         </div>
         <div className="order-1 lg:order-2">
-          <InviteClaimCard token={token} projectName={invite.project.name} releaseVersion={invite.release?.versionName ?? null} />
+          <WalletProviders><InviteClaimCard token={token} projectName={invite.project.name} releaseVersion={invite.release?.versionName ?? null} currentIdentity={currentIdentity} {...requirements} /></WalletProviders>
         </div>
       </div>
     </main>

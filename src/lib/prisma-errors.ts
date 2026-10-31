@@ -9,9 +9,13 @@ type AdapterError = {
   };
 };
 
-export function isTransactionConflict(error: unknown) {
+export function isTransactionConflict(error: unknown): boolean {
   if (error instanceof Prisma.PrismaClientKnownRequestError) {
-    return error.code === "P2034";
+    return error.code === "P2034" ||
+      (error.code === "P2010" && (
+        ["40001", "40P01"].includes(String(error.meta?.code)) ||
+        isTransactionConflict(error.meta?.driverAdapterError)
+      ));
   }
 
   if (!error || typeof error !== "object") return false;
@@ -20,7 +24,8 @@ export function isTransactionConflict(error: unknown) {
   return (
     adapterError.code === "P2034" ||
     (adapterError.name === "DriverAdapterError" &&
-      (adapterError.cause?.kind === "TransactionWriteConflict" || adapterError.cause?.originalCode === "40001"))
+      (adapterError.cause?.kind === "TransactionWriteConflict" ||
+        ["40001", "40P01"].includes(String(adapterError.cause?.originalCode))))
   );
 }
 

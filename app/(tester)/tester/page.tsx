@@ -5,6 +5,8 @@ import { buttonVariants } from "@/src/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/src/components/ui/card";
 import { EmptyState } from "@/src/components/ui/empty-state";
 import { WalletLinkCard } from "@/src/features/wallet/wallet-link-card";
+import { WalletSignIn } from "@/src/features/wallet/wallet-sign-in";
+import { getTesterIdentityLabel } from "@/src/lib/tester-identity";
 import { getAccessibleReleasesForUser, getTesterIdentity } from "@/src/features/projects/queries";
 import { requireTesterSession } from "@/src/lib/session";
 import { cn, formatBytes } from "@/src/lib/utils";
@@ -28,7 +30,8 @@ export default async function TesterDashboardPage() {
       subtitle="Open a build, install the APK, and send feedback to its builder."
       canBuild={canBuild}
       isGuest={Boolean(session.user.isAnonymous)}
-      identityLabel={session.user.isAnonymous ? "Guest tester" : session.user.email}
+      identityLabel={getTesterIdentityLabel({ ...session.user, wallets: tester?.wallets })}
+      identityWalletAddress={(tester?.wallets.find((wallet) => wallet.isPrimary) ?? tester?.wallets[0])?.address}
     >
       <div className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
         <div className="space-y-6">
@@ -80,12 +83,12 @@ export default async function TesterDashboardPage() {
             <Card className="rounded-[1.75rem] border-brand/30 bg-brand/5">
               <CardHeader>
                 <CardTitle>Keep your tester access</CardTitle>
-                <CardDescription>Add an email so your apps and feedback remain available on another device.</CardDescription>
+                <CardDescription>Add an email or continue with a wallet to keep your apps and feedback on another browser.</CardDescription>
               </CardHeader>
-              <CardContent><Link href="/tester/upgrade" className={cn(buttonVariants())}>Add recovery email</Link></CardContent>
+              <CardContent><Link href="/tester/upgrade" className={cn(buttonVariants())}>Add recovery email</Link><WalletSignIn /></CardContent>
             </Card>
           ) : null}
-          {!releases.length ? <details className="rounded-[1.6rem] border border-border bg-surface p-4"><summary className="cursor-pointer font-semibold">Builder asked you to link a wallet?</summary><div className="mt-4"><WalletLinkCard linkedWallets={tester?.wallets ?? []} /></div></details> : null}
+          {!session.user.isAnonymous && !releases.length ? <details className="rounded-[1.6rem] border border-border bg-surface p-4"><summary className="cursor-pointer font-semibold">Builder asked you to use a wallet?</summary><div className="mt-4"><WalletLinkCard linkedWallets={tester?.wallets ?? []} /></div></details> : null}
         </div>
       </div>
     </DashboardFrame>

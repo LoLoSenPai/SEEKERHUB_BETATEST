@@ -2,14 +2,14 @@ import { prisma } from "@/src/lib/db";
 import { hashInviteToken } from "@/src/lib/invite";
 import { evaluateReleaseAccess } from "@/src/lib/access";
 import type { Prisma } from "@prisma/client";
+import { releaseAnalyticsClaimScope, summarizeClaims, summarizeIdentities } from "@/src/lib/analytics";
 
 export async function getBuilderDashboard(userId: string) {
   const [
     projects,
-    claims,
-    grantedPlaces,
-    uniqueTesterRows,
+    claimRows,
     downloads,
+    uniqueDownloaderRows,
     uniqueViewRows,
     feedback,
     retainedProjectCount,
@@ -34,16 +34,9 @@ export async function getBuilderDashboard(userId: string) {
       },
       orderBy: { updatedAt: "desc" },
     }),
-    prisma.inviteClaim.count({
-      where: { inviteLink: { project: { ownerId: userId } } },
-    }),
-    prisma.inviteClaim.count({
-      where: { grantedAt: { not: null }, revokedAt: null, inviteLink: { project: { ownerId: userId } } },
-    }),
     prisma.inviteClaim.findMany({
-      where: { grantedAt: { not: null }, revokedAt: null, inviteLink: { project: { ownerId: userId } } },
-      distinct: ["userId"],
-      select: { userId: true },
+      where: { inviteLink: { project: { ownerId: userId } } },
+      select: { userId: true, grantedAt: true, revokedAt: true },
     }),
     prisma.downloadEvent.count({
       where: {
@@ -54,10 +47,15 @@ export async function getBuilderDashboard(userId: string) {
         },
       },
     }),
+    prisma.downloadEvent.findMany({
+      where: { userId: { not: null }, release: { project: { ownerId: userId } } },
+      distinct: ["userId"],
+      select: { userId: true, user: { select: { isAnonymous: true } } },
+    }),
     prisma.releaseViewEvent.findMany({
       where: { userId: { not: null }, release: { project: { ownerId: userId } } },
       distinct: ["releaseId", "userId"],
-      select: { releaseId: true, userId: true },
+      select: { releaseId: true, userId: true, user: { select: { isAnonymous: true } } },
     }),
     prisma.feedbackReport.count({
       where: {
@@ -71,16 +69,18 @@ export async function getBuilderDashboard(userId: string) {
     prisma.appProject.count({ where: { ownerId: userId } }),
     prisma.release.count({ where: { project: { ownerId: userId } } }),
   ]);
+  const downloaders = summarizeIdentities(uniqueDownloaderRows);
 
   return {
     projects,
     stats: {
       projectCount: projects.length,
       releaseCount: projects.reduce((count, project) => count + project.releases.length, 0),
-      claims,
-      grantedPlaces,
-      uniqueTesters: uniqueTesterRows.length,
+      ...summarizeClaims(claimRows),
       uniqueViews: uniqueViewRows.length,
+      viewers: summarizeIdentities(uniqueViewRows),
+      uniqueDownloaders: downloaders.total,
+      downloaders,
       downloads,
       feedback,
       retainedProjectCount,
@@ -138,7 +138,7 @@ export async function getProjectForOwner(slug: string, userId: string) {
 }
 
 export async function getReleaseForOwner(slug: string, releaseId: string, userId: string) {
-  return prisma.release.findFirst({
+  const release = await prisma.release.findFirst({
     where: {
       id: releaseId,
       deletedAt: null,
@@ -169,8 +169,8 @@ export async function getReleaseForOwner(slug: string, releaseId: string, userId
           user: true,
         },
       },
-      downloadEvents: true,
-      releaseViewEvents: true,
+      downloadEvents: { include: { user: { select: { isAnonymous: true } } } },
+      releaseViewEvents: { include: { user: { select: { isAnonymous: true } } } },
       inviteLinks: {
         include: {
           inviteClaims: true,
@@ -178,9 +178,24 @@ export async function getReleaseForOwner(slug: string, releaseId: string, userId
       },
     },
   });
+  if (!release) return null;
+
+  const claims = await prisma.inviteClaim.findMany({
+    where: releaseAnalyticsClaimScope(release),
+    select: { userId: true, grantedAt: true, revokedAt: true },
+  });
+  return {
+    ...release,
+    analytics: {
+      ...summarizeClaims(claims),
+      viewers: summarizeIdentities(release.releaseViewEvents),
+      downloaders: summarizeIdentities(release.downloadEvents),
+    },
+  };
 }
 
 export async function getInvitePreview(token: string) {
+  const policyPreview = { select: { requireLinkedWallet: true, requireVerifiedSeeker: true, _count: { select: { walletEntries: true } } } } as const;
   return prisma.inviteLink.findFirst({
     where: {
       tokenHash: hashInviteToken(token),
@@ -190,8 +205,8 @@ export async function getInvitePreview(token: string) {
       OR: [{ releaseId: null }, { release: { deletedAt: null } }],
     },
     include: {
-      project: true,
-      release: true,
+      project: { include: { releases: { where: { status: "PUBLISHED", deletedAt: null }, select: { accessPolicy: policyPreview } } } },
+      release: { include: { accessPolicy: policyPreview } },
       testerGroup: true,
       inviteClaims: true,
     },

@@ -53,9 +53,11 @@ export function AccessPolicySummary({
           <StatusBadge enabled={policy.requireInviteAcceptance} enabledLabel="Invite required" disabledLabel="No invite required" />
           <StatusBadge enabled={policy.requireLinkedWallet} enabledLabel="Wallet signature required" disabledLabel="Wallet optional" />
           <StatusBadge enabled={policy.requireSolanaMobile} enabledLabel="Solana Mobile recommended" disabledLabel="Any device" />
-          <StatusBadge enabled={policy.requireVerifiedSeeker} enabledLabel="Verified Seeker required" disabledLabel="Seeker optional" />
+          <StatusBadge enabled={policy.requireVerifiedSeeker} enabledLabel="SGT required" disabledLabel="SGT optional" />
           <StatusBadge enabled={policy.allowPreviousReleases} enabledLabel="Older versions visible" disabledLabel="Current version only" />
         </div>
+
+        {policy.requireVerifiedSeeker ? <p className="text-xs leading-5 text-muted-foreground">SGT ownership verifies the wallet, not the phone currently being used. An imported wallet can qualify on another device.</p> : null}
 
         <div className="grid gap-3 text-sm text-foreground">
           <div>Tester group: {policy.testerGroup?.name ?? "None"}</div>

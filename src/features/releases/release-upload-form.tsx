@@ -68,8 +68,11 @@ export function ReleaseUploadForm({ projectId, projectSlug, maxApkBytes }: {
         throw new Error(result?.error ?? "APK validation could not finish. Retry to continue with the saved upload.");
       }
       router.push(`/builder/apps/${projectSlug}/releases/${result.releaseId}`);
-    } catch (cause) { setError(cause instanceof Error ? cause.message : "Upload failed. Please try again."); }
-    finally { inFlight.current = false; setStage("idle"); }
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Upload failed. Please try again.");
+      inFlight.current = false;
+      setStage("idle");
+    }
   }
 
   return <Card className="rounded-[2rem]">

@@ -25,7 +25,7 @@ export async function createProjectAction(formData: FormData) {
     description: parsed.description || null,
   });
 
-  redirect(`/builder/apps/${project.slug}`);
+  return { redirectTo: `/builder/apps/${project.slug}` };
 }
 
 export async function updateProjectAction(formData: FormData) {

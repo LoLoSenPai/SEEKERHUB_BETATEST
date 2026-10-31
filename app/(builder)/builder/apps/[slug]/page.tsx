@@ -8,9 +8,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/src
 import { Input } from "@/src/components/ui/input";
 import { Label } from "@/src/components/ui/label";
 import { PendingSubmitButton } from "@/src/components/ui/pending-submit-button";
-import { Textarea } from "@/src/components/ui/textarea";
+import { ProjectForm } from "@/src/features/projects/project-form";
 import { getProjectForOwner } from "@/src/features/projects/queries";
-import { deleteProjectAction, updateProjectAction } from "@/src/features/projects/actions";
+import { deleteProjectAction } from "@/src/features/projects/actions";
 import { requireBuilderSession } from "@/src/lib/session";
 import { formatBytes } from "@/src/lib/utils";
 
@@ -115,18 +115,7 @@ export default async function BuilderProjectPage({
               <CardDescription>Update the core project details that anchor releases, invite links, and tester groups.</CardDescription>
             </CardHeader>
             <CardContent>
-              <form action={updateProjectAction} className="grid gap-5">
-                <input type="hidden" name="projectId" value={project.id} />
-                <div className="grid gap-2">
-                  <Label htmlFor="name">App name</Label>
-                  <Input id="name" name="name" defaultValue={project.name} required />
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="description">Description</Label>
-                  <Textarea id="description" name="description" defaultValue={project.description ?? ""} />
-                </div>
-                <PendingSubmitButton idleLabel="Save project" pendingLabel="Saving project..." />
-              </form>
+              <ProjectForm project={{ id: project.id, name: project.name, description: project.description }} />
             </CardContent>
           </Card>
 

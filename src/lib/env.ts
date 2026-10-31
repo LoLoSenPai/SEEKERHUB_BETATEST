@@ -53,6 +53,7 @@ const serverEnvSchema = z.object({
 const clientEnvSchema = z.object({
   NEXT_PUBLIC_APP_URL: z.string().url(),
   NEXT_PUBLIC_SOLANA_RPC_URL: z.string().url(),
+  NEXT_PUBLIC_SEEKER_RELAY_DOMAIN: z.string().regex(/^(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}$/i).or(z.literal("")),
 });
 
 type ServerEnv = z.infer<typeof serverEnvSchema>;
@@ -71,6 +72,8 @@ const clientEnvCache: ClientEnv = clientEnvSchema.parse({
     process.env.NEXT_PUBLIC_SOLANA_RPC_URL,
     DEFAULT_SOLANA_RPC_URL,
   ),
+  // The operator accepted the Solana Mobile relay terms. Empty disables Seeker Connect.
+  NEXT_PUBLIC_SEEKER_RELAY_DOMAIN: process.env.NEXT_PUBLIC_SEEKER_RELAY_DOMAIN ?? "relay.solanamobile.com",
 });
 
 export function getServerEnv() {

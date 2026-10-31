@@ -76,7 +76,7 @@ test("uploads a synthetic APK through the UI and serves the exact bytes to a gue
     expect(new URL(inviteUrl).origin).toBe(baseUrl);
     const guestPage = await guestContext.newPage();
     await guestPage.goto(inviteUrl);
-    await guestPage.getByRole("button", { name: "Open beta access" }).click();
+    await guestPage.getByRole("button", { name: "Open beta access as guest", exact: true }).click();
     await expect(guestPage.getByRole("link", { name: "Download APK" })).toBeVisible();
     const downloadPromise = guestPage.waitForEvent("download");
     await guestPage.getByRole("link", { name: "Download APK" }).click();
@@ -222,7 +222,7 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 1440, height: 900 
 
       const guestPage = await guestContext.newPage();
       await guestPage.goto(inviteUrl);
-      await guestPage.getByRole("button", { name: "Open beta access" }).click();
+      await guestPage.getByRole("button", { name: "Open beta access as guest", exact: true }).click();
       await expect(guestPage).toHaveURL(new RegExp(`/tester/releases/${release.id}|/tester$`));
       if (new URL(guestPage.url()).pathname === "/tester") await guestPage.getByRole("link", { name: new RegExp(`E2E app ${id}`) }).click();
       await expect(guestPage.getByRole("link", { name: "Download APK" })).toBeVisible();

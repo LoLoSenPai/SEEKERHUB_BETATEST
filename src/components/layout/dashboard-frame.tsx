@@ -4,6 +4,7 @@ import { Badge } from "@/src/components/ui/badge";
 import { cn } from "@/src/lib/utils";
 import { SignOutButton } from "@/src/components/layout/sign-out-button";
 import { ThemeToggle } from "@/src/components/theme/theme-toggle";
+import { WalletName } from "@/src/features/wallet/wallet-name";
 
 type NavItem = {
   href: string;
@@ -25,6 +26,7 @@ export function DashboardFrame({
   canBuild = false,
   isGuest = false,
   identityLabel = "Signed in",
+  identityWalletAddress,
   children,
 }: {
   kind: "builder" | "tester";
@@ -34,6 +36,7 @@ export function DashboardFrame({
   canBuild?: boolean;
   isGuest?: boolean;
   identityLabel?: string;
+  identityWalletAddress?: string;
   children: React.ReactNode;
 }) {
   const items = builderItems;
@@ -57,7 +60,9 @@ export function DashboardFrame({
             </div>
             <div className="flex min-w-0 max-w-full items-center rounded-full border border-border bg-card p-1 pl-3 shadow-sm">
               <CircleUserRound className="size-4 shrink-0 text-success" aria-hidden="true" />
-              <span className="min-w-0 truncate px-2 text-xs font-semibold" title={identityLabel}>{identityLabel}</span>
+              <span className="min-w-0 truncate px-2 text-xs font-semibold" title={identityWalletAddress ?? identityLabel}>
+                {identityWalletAddress && !isGuest ? <WalletName address={identityWalletAddress} /> : identityLabel}
+              </span>
               <ThemeToggle />
               {isGuest ? (
                 <span className="hidden border-l border-border px-3 text-xs text-muted-foreground sm:inline">Saved in this browser</span>

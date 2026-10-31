@@ -1,5 +1,4 @@
 import { createHmac } from "node:crypto";
-import { Prisma } from "@prisma/client";
 import { prisma } from "@/src/lib/db";
 import { getServerEnv } from "@/src/lib/env";
 import { AppError } from "@/src/lib/errors";
@@ -40,20 +39,16 @@ export async function consumeRateLimit(input: {
 
   for (let attempt = 0; attempt < 2; attempt += 1) {
     try {
-      const count = await prisma.$transaction(
-        async (tx) => {
-          const bucket = await tx.rateLimitBucket.upsert({
-            where: {
-              keyHash_action_windowStartedAt: { keyHash, action: input.action, windowStartedAt },
-            },
-            create: { keyHash, action: input.action, windowStartedAt, expiresAt, count: 1 },
-            update: { count: { increment: 1 } },
-            select: { count: true },
-          });
-          return bucket.count;
+      // One atomic increment is sufficient. An interactive serializable transaction
+      // needlessly rejects simultaneous metadata requests from the same page.
+      const { count } = await prisma.rateLimitBucket.upsert({
+        where: {
+          keyHash_action_windowStartedAt: { keyHash, action: input.action, windowStartedAt },
         },
-        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
-      );
+        create: { keyHash, action: input.action, windowStartedAt, expiresAt, count: 1 },
+        update: { count: { increment: 1 } },
+        select: { count: true },
+      });
 
       if (count > input.limit) {
         throw new AppError("Too many requests. Please try again later.", 429, "RATE_LIMITED");

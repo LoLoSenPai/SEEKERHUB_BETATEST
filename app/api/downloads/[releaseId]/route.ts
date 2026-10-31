@@ -44,6 +44,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ rele
       return NextResponse.json({ error: "You do not have access to download this release." }, { status: 403 });
     }
 
+    const url = await createSignedDownloadUrl(
+      testerRelease.release.buildAsset.storageKey,
+      testerRelease.release.buildAsset.originalFileName,
+    );
     await prisma.downloadEvent.create({
       data: {
         releaseId,
@@ -52,10 +56,6 @@ export async function GET(request: Request, { params }: { params: Promise<{ rele
       },
     });
 
-    const url = await createSignedDownloadUrl(
-      testerRelease.release.buildAsset.storageKey,
-      testerRelease.release.buildAsset.originalFileName,
-    );
     return NextResponse.redirect(url);
   } catch (error) {
     return apiError(error, "Unable to generate download link.");

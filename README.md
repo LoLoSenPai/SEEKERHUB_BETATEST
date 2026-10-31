@@ -54,8 +54,9 @@ Required service variables:
 - `CRON_SECRET`: Vercel Cron bearer secret.
 - `RESEND_API_KEY`, `EMAIL_FROM`, `EMAIL_REPLY_TO`: verified Resend sender configuration.
 - `S3_ENDPOINT`, `S3_REGION`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_FORCE_PATH_STYLE`.
-- `SOLANA_RPC_URL`: server RPC used for Token-2022 SGT verification.
+- `SOLANA_RPC_URL`: mainnet server RPC used for Token-2022 SGT verification and primary `.skr` name resolution.
 - `NEXT_PUBLIC_SOLANA_RPC_URL`: browser RPC used by wallet adapters.
+- `NEXT_PUBLIC_SEEKER_RELAY_DOMAIN`: bare relay host for Seeker Connect. Defaults to `relay.solanamobile.com`; an empty value disables registration. The operator accepted the [Solana Mobile relay terms](https://docs.solanamobile.com/solana-mobile-stack/seeker-connect-quickstart) for this deployment. Forks must review and accept them independently. HTTPS is required; local QA disables the relay.
 
 Production startup fails explicitly when any core service secret, email setting, invite key, rate-limit salt, admin allowlist, or cron secret is missing. `/api/health` then monitors live database, storage, email, cron, and invite-key readiness.
 
@@ -126,11 +127,15 @@ Only run those two commands against production after explicit approval and after
 
 - `User` is the common identity for builders and testers.
 - `BuilderProfile` grants builder capability, status, quotas, and optional admin access.
-- Invite visitors start as guests. Magic-link or wallet recovery transfers claims, memberships, feedback, events, profiles, and wallets transactionally to the recovered account.
+- Standard invites offer guest access. Wallet-gated invites ask for wallet sign-in first; connecting alone is not authentication. One explicit, domain-bound signature creates a durable tester or recovers the account already owning that address. Reopening an invite while signed in can reuse the current account without another signature.
+- Wallet recovery transfers the current guest's claims, memberships, feedback, events, profiles, and wallets transactionally. Duplicate claims collapse to one, preserving revocations. Two established accounts are never silently merged or switched. Wallet authentication grants no builder permissions.
 - Link expiration/revocation blocks new claims **and new seat grants** to pending claims. Already granted places are not invalidated by closing a link. `TesterAccess` keeps project-level revocation effective across every future invite link; reactivation allows a new claim but never restores an old seat automatically.
 - Metadata visibility, APK download, and feedback permission are evaluated separately with typed reason codes.
 - Device/browser detection is advisory only. It can never provide Seeker access.
 - A Seeker gate requires a fresh wallet signature and a server-side positive-balance Token-2022 SGT check. Verification expires after 24 hours.
+- Seeker Connect 0.2 uses the SDK's certified-wallet App Link and a short-lived MWA session for each interaction. Android SGT journeys offer it directly, while general wallet choice remains available. Cancellation is normal; dropped requests are never retried automatically. Selecting an adapter is not hardware attestation or an SGT proof.
+- `.skr` display names use `@solana-mobile/skr-domain` and the wallet's primary name only. The SDK rechecks ownership/expiry; no primary name means a short-address fallback. The authenticated resolver only handles wallets linked to the caller, with bounded requests, rate limits and a per-instance cache (one hour positive, five minutes negative). Names never authorize access or merge accounts, and RPC failures do not block sign-in/downloads.
+- Analytics separate identified accounts from guest browser identities. Recovery deduplicates transferred history by account; an abandoned anonymous session cannot be attributed to a person without a recovery proof. Download links issued count repeated requests, not confirmed installs.
 
 Default public-beta quotas are one project, five retained releases, 250 MiB per APK, and 500 MiB physical storage. Trash counts until the seven-day R2 purge completes.
 

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { Prisma } from "@prisma/client";
 import { parseEnvBoolean } from "@/src/lib/env";
 import { isTransactionConflict, isUniqueConstraintError } from "@/src/lib/prisma-errors";
 import { safeReturnTo } from "@/src/lib/redirect";
@@ -63,6 +64,21 @@ describe("public beta hardening helpers", () => {
   it("recognizes serializable conflicts emitted directly by driver adapters", () => {
     expect(isTransactionConflict({ name: "DriverAdapterError", cause: { kind: "TransactionWriteConflict" } })).toBe(true);
     expect(isTransactionConflict({ name: "DriverAdapterError", cause: { originalCode: "40001" } })).toBe(true);
+    expect(isTransactionConflict({ name: "DriverAdapterError", cause: { originalCode: "40P01" } })).toBe(true);
+  });
+
+  it("retries raw-query serialization failures and deadlocks, not arbitrary SQL errors", () => {
+    for (const code of ["40001", "40P01", "42601"]) {
+      const error = new Prisma.PrismaClientKnownRequestError("Raw query failed", {
+        code: "P2010", clientVersion: "test", meta: { code },
+      });
+      expect(isTransactionConflict(error)).toBe(code !== "42601");
+      const wrapped = new Prisma.PrismaClientKnownRequestError("Raw query failed", {
+        code: "P2010", clientVersion: "test",
+        meta: { driverAdapterError: { name: "DriverAdapterError", cause: { originalCode: code } } },
+      });
+      expect(isTransactionConflict(wrapped)).toBe(code !== "42601");
+    }
   });
 
   it("recognizes unique violations emitted directly by driver adapters", () => {

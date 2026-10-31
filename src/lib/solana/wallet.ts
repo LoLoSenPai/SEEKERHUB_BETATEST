@@ -12,7 +12,7 @@ export function buildWalletChallengeMessage(input: {
   const statements = {
     LINK: "Link this wallet to your SeekerHub tester account.",
     VERIFY_SGT: "Verify Seeker Genesis Token ownership for private beta access.",
-    SIGN_IN: "Sign in to recover your SeekerHub tester account.",
+    SIGN_IN: "Continue to SeekerHub. Recover your tester account or create one with this wallet. No transaction or payment.",
   } as const;
 
   return [

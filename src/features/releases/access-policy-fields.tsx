@@ -49,14 +49,14 @@ const presets: Array<{
   },
   {
     id: "seeker",
-    title: "Verified Seeker invite",
-    description: "A shared invite works only after the tester proves current Seeker Genesis Token ownership.",
+    title: "Seeker holders (SGT)",
+    description: "Verify the wallet holds a Seeker Genesis Token, not which phone the tester is using.",
     icon: ShieldCheck,
   },
   {
     id: "custom",
     title: "Combined requirements",
-    description: "Combine invite, group, wallet and Seeker rules. All selected requirements apply.",
+    description: "Combine invite, group, wallet and SGT rules. All selected requirements apply.",
     icon: ShieldCheck,
   },
 ];
@@ -107,7 +107,7 @@ export function AccessPolicyFields({ groups, defaults = {}, confirmBroaderAudien
     requireInvite ? "Claims the invite" : "Tester signs in",
     ...(groupId ? ["Joins the required tester group"] : []),
     ...(requireWallet || allowlist.trim() ? [allowlist.trim() ? "Links an allowlisted wallet" : "Links a wallet"] : []),
-    ...(requireSeeker ? ["Verifies Seeker ownership"] : []),
+    ...(requireSeeker ? ["Verifies SGT ownership"] : []),
     "Downloads the APK",
   ];
 
@@ -205,6 +205,7 @@ export function AccessPolicyFields({ groups, defaults = {}, confirmBroaderAudien
             ? "Share your tester dashboard URL. The release appears only after an allowed wallet is linked."
             : "The invite's tester limit applies only to eligible claims. A wallet or SGT requirement must be met before a place is granted."}
         </p>
+        {requireSeeker ? <p className="mt-2 text-xs leading-5 text-muted-foreground">This checks the wallet, not the current phone. The same SGT wallet imported into another wallet app can qualify on a different device.</p> : null}
       </div>
 
       <details open={preset === "custom" ? true : undefined} className="rounded-2xl border border-border bg-card p-4">
@@ -234,8 +235,8 @@ export function AccessPolicyFields({ groups, defaults = {}, confirmBroaderAudien
             setPreset("custom");
             if (checked) setRequireWallet(true);
           }}
-          label="Require verified Seeker (SGT)"
-          help="Blocks download until the linked wallet has a recent server-side Seeker Genesis Token verification."
+          label="Require Seeker Genesis Token (SGT)"
+          help="Requires a recent server-verified SGT in the linked wallet. It does not restrict the current phone: the same wallet imported into Phantom or another wallet app can pass on a non-Seeker device."
         />
         <PolicyCheckbox
           name="requireSolanaMobile"

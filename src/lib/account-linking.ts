@@ -1,9 +1,22 @@
 import { prisma } from "@/src/lib/db";
+import { Prisma } from "@prisma/client";
+import { AppError } from "@/src/lib/errors";
+import { isTransactionConflict, isUniqueConstraintError } from "@/src/lib/prisma-errors";
 
-export async function transferAnonymousAccount(anonymousUserId: string, durableUserId: string) {
+export async function transferAnonymousAccountInTransaction(tx: Prisma.TransactionClient, anonymousUserId: string, durableUserId: string) {
   if (anonymousUserId === durableUserId) return;
+  const ids = [anonymousUserId, durableUserId].sort();
+  await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "User" WHERE "id" IN (${Prisma.join(ids)}) ORDER BY "id" FOR UPDATE`);
+  const source = await tx.user.findUnique({ where: { id: anonymousUserId }, include: { builderProfile: true, accounts: { select: { id: true }, take: 1 } } });
+  // Better Auth may invoke its post-sign-in hook after the wallet transaction already merged this guest.
+  if (!source) return;
+  if (!source.isAnonymous || source.builderProfile || source.accounts.length) {
+    throw new AppError("Only a guest account can be transferred. Sign out to switch accounts.", 409, "ACCOUNT_SWITCH_REQUIRED");
+  }
+  if (!(await tx.user.findUnique({ where: { id: durableUserId }, select: { id: true } }))) {
+    throw new AppError("The destination account no longer exists.", 409, "ACCOUNT_CHANGED");
+  }
 
-  await prisma.$transaction(async (tx) => {
     const claims = await tx.inviteClaim.findMany({ where: { userId: anonymousUserId } });
     for (const claim of claims) {
       const existing = await tx.inviteClaim.findUnique({
@@ -81,5 +94,19 @@ export async function transferAnonymousAccount(anonymousUserId: string, durableU
         metadataJson: { anonymousUserId },
       },
     });
-  });
+}
+
+export async function transferAnonymousAccount(anonymousUserId: string, durableUserId: string) {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      await prisma.$transaction(
+        (tx) => transferAnonymousAccountInTransaction(tx, anonymousUserId, durableUserId),
+        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+      );
+      return;
+    } catch (error) {
+      if (attempt < 3 && (isTransactionConflict(error) || isUniqueConstraintError(error))) continue;
+      throw error;
+    }
+  }
 }

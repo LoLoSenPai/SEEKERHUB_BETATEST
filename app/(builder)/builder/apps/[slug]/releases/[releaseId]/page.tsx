@@ -66,9 +66,7 @@ export default async function BuilderReleaseDetailPage({
   catch { /* A retired encryption key must not make the release page unavailable. */ }
   const shareUrl = token ? buildInviteShareUrl(token, getClientEnv().NEXT_PUBLIC_APP_URL) : null;
   const testerUrl = `${getClientEnv().NEXT_PUBLIC_APP_URL.replace(/\/$/, "")}/tester`;
-  const claims = release.inviteLinks.flatMap((invite) => invite.inviteClaims);
-  const uniqueTesterIds = new Set(claims.filter((claim) => claim.grantedAt && !claim.revokedAt).map((claim) => claim.userId));
-  const uniqueViewerIds = new Set(release.releaseViewEvents.map((event) => event.userId).filter(Boolean));
+  const { analytics } = release;
 
   return (
     <DashboardFrame
@@ -137,7 +135,7 @@ export default async function BuilderReleaseDetailPage({
       <details className="mt-6 rounded-[1.75rem] border border-border bg-card p-5">
         <summary className="cursor-pointer font-semibold">Change who can access this release</summary>
         <Card className="mt-4 border-0 shadow-none">
-        <CardHeader><CardTitle>Edit access policy</CardTitle><CardDescription>Allowlist entries automatically require a linked wallet. Device capability remains advisory; only a current SGT proof is a Seeker gate.</CardDescription></CardHeader>
+        <CardHeader><CardTitle>Edit access policy</CardTitle><CardDescription>Allowlist entries require a linked wallet. SGT verification checks that wallet, not the phone currently being used.</CardDescription></CardHeader>
         <CardContent>
             <ReleasePolicyEditor
               releaseId={release.id}
@@ -161,16 +159,26 @@ export default async function BuilderReleaseDetailPage({
         <Card className="rounded-[1.75rem]">
           <CardHeader>
             <CardTitle>Beta analytics</CardTitle>
-            <CardDescription>Simple but structured funnel counts for the beta lifecycle.</CardDescription>
+            <CardDescription>Who opened this version, requested a download, and shared feedback.</CardDescription>
           </CardHeader>
           <CardContent className="grid gap-3 text-sm text-foreground">
-            <div>Invite links: {release.inviteLinks.length}</div>
-            <div>Claims: {claims.length}</div>
-            <div>Granted places: {claims.filter((claim) => Boolean(claim.grantedAt)).length}</div>
-            <div>Unique testers: {uniqueTesterIds.size}</div>
-            <div>Unique viewers: {uniqueViewerIds.size}</div>
+            <div>Links for this version: {release.inviteLinks.length}</div>
+            <div>Invite claims: {analytics.claims}</div>
+            <div>Waiting for access: {analytics.pendingClaims}</div>
+            <div>Places granted (not revoked): {analytics.grantedPlaces}</div>
+            <div>Revoked claims: {analytics.revokedClaims}</div>
+            <div>Places used: {analytics.occupiedPlaces}</div>
+            <div>Testers with a place: {analytics.uniqueTesters}</div>
+            <div>Account viewers: {analytics.viewers.accounts}</div>
+            <div>Guest viewers: {analytics.viewers.guests}</div>
             <div>Download links issued: {release.downloadEvents.length}</div>
+            <div>Unique downloaders: {analytics.downloaders.total} ({analytics.downloaders.accounts} email / wallet; {analytics.downloaders.guests} guest)</div>
             <div>Feedback reports: {release.feedbackReports.length}</div>
+            <details className="text-xs leading-6 text-muted-foreground">
+              <summary className="cursor-pointer font-medium text-foreground">How these numbers work</summary>
+              <p className="mt-2">The same email or wallet account counts once for this version, including recovered guest activity. Guests are browser identities, not unique people. Events without an account are excluded from unique counts. Download links issued include repeat requests, not confirmed downloads or installs.</p>
+              <p className="mt-2">Claims include this version, app-wide invitations and granted invitations allowing access to earlier builds. App-wide places are shared across versions. Revoked places still consume capacity; closing a link does not revoke an existing place. Wallet, group and SGT requirements are checked again before downloading.</p>
+            </details>
           </CardContent>
         </Card>
         <Card className="rounded-[1.75rem]">

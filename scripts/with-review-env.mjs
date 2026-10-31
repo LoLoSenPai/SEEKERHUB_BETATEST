@@ -23,6 +23,7 @@ const env = {
   S3_FORCE_PATH_STYLE: "true",
   SOLANA_RPC_URL: "http://127.0.0.1:8899",
   NEXT_PUBLIC_SOLANA_RPC_URL: "http://127.0.0.1:8899",
+  NEXT_PUBLIC_SEEKER_RELAY_DOMAIN: "",
   HELIUS_API_KEY: "",
   RESEND_API_KEY: "re_local_disabled",
   EMAIL_FROM: "SeekerHub QA <qa@example.test>",

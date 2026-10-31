@@ -1,5 +1,20 @@
 # Beta readiness checkpoint
 
+## Wallet recovery and mobile follow-up (2026-10-31)
+
+- Wallet continuation now creates or recovers one durable tester account. Current guest activity is merged transactionally, including duplicate claims, memberships and analytics; revocations survive the merge. Existing durable accounts are never silently merged or switched. Legacy wallet-linked guests can recover their original account.
+- Wallet-gated invitations authenticate before claiming; ordinary invitations keep the guest option. Reopening a link while signed in reuses the current account. A connection alone never signs a message or grants SGT access.
+- Builder audience creation/editing explicitly labels the gate as SGT ownership, not a current-phone restriction. Importing the same signing wallet into another device can pass; no client adapter name or device hint is used as hardware attestation.
+- Seeker Connect Wallet Standard 0.2.0 is enabled on HTTPS using the official SDK App Link, after the operator explicitly accepted relay terms. Android SGT flows have a direct selector, with ordinary wallet choice retained. Adapter switches wait for disconnection to finish; cancellation and dropped sessions are not automatically retried.
+- Primary `.skr` names use the official 1.1.1 SDK, server-side ownership/expiry checks, bounded caches and caller-wallet authorization. Client lookups are coalesced per account/address. Missing names or RPC failures fall back to the address without blocking authentication or downloads.
+- Create, save, upload, publish and authentication controls preserve their values and stay locked through successful navigation. Failed operations allow explicit retry; upload retries reuse the saved session.
+- Analytics separate email/wallet accounts from guest browser identities, deduplicate merged history and distinguish places used, unique downloaders and download links issued. Detailed definitions are collapsed by default. No device fingerprinting was introduced.
+- PostgreSQL concurrency tests cover account recovery, preservation of concurrent revocations and atomic rate-limit increments. No schema migration, production database write, real-wallet signature or production storage write was needed for validation.
+
+Validation: ESLint/typecheck and production build pass; 241 unit tests across 28 files, 73 PostgreSQL/MinIO integration tests across 10 files, and 19 browser tests pass. The isolated APK-worker artifact gate passes. Dependency audit remains at zero critical, four documented high exceptions and fourteen moderate findings.
+
+Browser wallet fixtures sign real authentication challenges with disposable test keys and exercise actual session cookies/backend authorization. The Android selector uses Wallet Standard mocks and a 390px Android user-agent; it does not validate native App Links, the real relay, Seed Vault prompts or physical Seeker behavior. SGT gating tests use controlled fixtures, not a live SGT wallet. A physical-device sign-in, verification, sign-out and recovery check remains required before claiming that boundary validated.
+
 Pre-deployment checkpoint following the 2026-10-31 audit. At the end of implementation, changes were validated locally on `main`; no production migration, email send, R2 write or deployment was used for that validation. The user subsequently authorized a production release from `main`.
 
 ## Delivered

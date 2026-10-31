@@ -22,6 +22,7 @@ export function ReleasePublishForm({ releaseId, version, packageName, groups, in
   defaults?: PolicyDefaults;
 }) {
   const router = useRouter();
+  const inFlight = useRef(false);
   const formRef = useRef<HTMLFormElement>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
   const [step, setStep] = useState(1);
@@ -72,16 +73,21 @@ export function ReleasePublishForm({ releaseId, version, packageName, groups, in
 
   return <form ref={formRef} noValidate className="space-y-6 [&_input]:scroll-mb-28 [&_select]:scroll-mb-28 [&_textarea]:scroll-mb-28 [&_summary]:scroll-mb-28" onSubmit={async (event) => {
     event.preventDefault();
+    if (inFlight.current) return;
     if (step !== 3) { next(); return; }
     if (busy || !review) return;
+    inFlight.current = true;
     setError(""); setBusy(true);
     try {
       const response = await fetch(`/api/releases/${releaseId}/publish`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(review) });
       const result = await response.json();
       if (!response.ok) throw new Error(result.issues?.[0]?.message ?? result.error ?? "Publication failed. Your draft is still saved.");
       router.push(result.redirectTo);
-    } catch (cause) { setError(cause instanceof Error ? cause.message : "Publication failed. Please try again."); }
-    finally { setBusy(false); }
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Publication failed. Please try again.");
+      inFlight.current = false;
+      setBusy(false);
+    }
   }}>
     <ol className="grid grid-cols-4 gap-2 border-b border-border pb-5 text-xs sm:text-sm" aria-label="Release preparation">
       {["APK checked", "Release notes", "Audience", "Publish"].map((label, index) => <li key={label} aria-current={index === step ? "step" : undefined} className={index <= step ? "font-semibold text-foreground" : "text-muted-foreground"}>
@@ -111,7 +117,7 @@ export function ReleasePublishForm({ releaseId, version, packageName, groups, in
     {step === 3 && review ? <section className="space-y-5" aria-label="Review before publication">
       <div><h2 className="text-xl font-semibold">Ready to share v{version}?</h2><p className="mt-1 break-all font-mono text-xs text-muted-foreground">{packageName}</p></div>
       <dl className="grid gap-3 rounded-2xl border border-border bg-muted/40 p-4 text-sm">
-        <div><dt className="text-muted-foreground">Access</dt><dd className="mt-1 font-semibold">{review.accessPolicy.requireInviteAcceptance ? "Private invite link" : "Wallet allowlist"}{review.accessPolicy.testerGroupId ? ` + ${groups.find((group) => group.id === review.accessPolicy.testerGroupId)?.name ?? "selected group"}` : ""}{review.accessPolicy.requireVerifiedSeeker ? " + verified Seeker wallet" : review.accessPolicy.requireLinkedWallet ? " + linked wallet" : ""}</dd></div>
+        <div><dt className="text-muted-foreground">Access</dt><dd className="mt-1 font-semibold">{review.accessPolicy.requireInviteAcceptance ? "Private invite link" : "Wallet allowlist"}{review.accessPolicy.testerGroupId ? ` + ${groups.find((group) => group.id === review.accessPolicy.testerGroupId)?.name ?? "selected group"}` : ""}{review.accessPolicy.requireVerifiedSeeker ? " + verified SGT ownership" : review.accessPolicy.requireLinkedWallet ? " + linked wallet" : ""}</dd></div>
         {review.accessPolicy.walletAllowlist.length ? <div><dt className="text-muted-foreground">Allowed wallets</dt><dd>{review.accessPolicy.walletAllowlist.length} addresses</dd></div> : null}
         <div><dt className="text-muted-foreground">Older versions</dt><dd>{review.accessPolicy.allowPreviousReleases ? "Earlier builds may be accessed if their own requirements are met" : "Not granted by this release"}</dd></div>
         {review.accessPolicy.requireSolanaMobile ? <div><dt className="text-muted-foreground">Device recommendation</dt><dd>Solana Mobile recommended, never required</dd></div> : null}

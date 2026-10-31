@@ -7,6 +7,8 @@ import { buttonVariants } from "@/src/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/src/components/ui/card";
 import { FeedbackForm } from "@/src/features/feedback/feedback-form";
 import { WalletLinkCard } from "@/src/features/wallet/wallet-link-card";
+import { WalletSignIn } from "@/src/features/wallet/wallet-sign-in";
+import { getTesterIdentityLabel } from "@/src/lib/tester-identity";
 import { getAccessibleReleasesForUser, getTesterRelease } from "@/src/features/projects/queries";
 import { prisma } from "@/src/lib/db";
 import { requireTesterSession } from "@/src/lib/session";
@@ -54,7 +56,8 @@ export default async function TesterReleaseDetailPage({
       subtitle={`Private Android beta, version ${release.versionName}`}
       canBuild={canBuild}
       isGuest={Boolean(session.user.isAnonymous)}
-      identityLabel={session.user.isAnonymous ? "Guest tester" : session.user.email}
+      identityLabel={getTesterIdentityLabel({ ...session.user, wallets: user.wallets })}
+      identityWalletAddress={(user.wallets.find((wallet) => wallet.isPrimary) ?? user.wallets[0])?.address}
     >
       <Link href="/tester" className="mb-4 inline-flex items-center gap-2 text-sm font-semibold text-muted-foreground transition hover:text-foreground">
         <ArrowLeft className="size-4" aria-hidden="true" />
@@ -133,8 +136,8 @@ export default async function TesterReleaseDetailPage({
           {walletBlock ? <><div className="px-1"><div className="section-eyebrow">Required to download</div><h2 className="mt-2 text-xl font-semibold">Complete wallet access</h2></div><WalletLinkCard linkedWallets={user.wallets} requiredSeeker={seekerBlock} showSeeker={seekerBlock} /></> : null}
           {session.user.isAnonymous ? (
             <Card className="rounded-[1.75rem] border-brand/25 bg-brand/5">
-              <CardHeader><CardTitle>Keep this access</CardTitle><CardDescription>Add an email to recover this beta and your feedback on another device.</CardDescription></CardHeader>
-              <CardContent><Link href={`/tester/upgrade?returnTo=${encodeURIComponent(`/tester/releases/${release.id}`)}`} className={cn(buttonVariants(), "w-full justify-center sm:w-auto")}>Add recovery email</Link></CardContent>
+              <CardHeader><CardTitle>Keep this access</CardTitle><CardDescription>Add an email or use a wallet to recover this beta and your feedback on another browser.</CardDescription></CardHeader>
+              <CardContent><Link href={`/tester/upgrade?returnTo=${encodeURIComponent(`/tester/releases/${release.id}`)}`} className={cn(buttonVariants(), "w-full justify-center sm:w-auto")}>Add recovery email</Link>{!walletBlock ? <WalletSignIn returnTo={`/tester/releases/${release.id}`} /> : null}</CardContent>
             </Card>
           ) : null}
         </div>

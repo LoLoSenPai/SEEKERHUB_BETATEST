@@ -183,13 +183,16 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 1440, height: 900 
         await builderPage.keyboard.press("Tab");
         const limit = builderPage.getByLabel("Tester places (optional)");
         await expect(limit).toBeFocused();
-        const field = await limit.boundingBox();
-        const footer = await builderPage.locator("form div.sticky").boundingBox();
-        expect(field).not.toBeNull();
-        expect(footer).not.toBeNull();
-        expect(field!.y).toBeGreaterThanOrEqual(0);
-        expect(field!.y + field!.height).toBeLessThanOrEqual(viewport.height);
-        expect(field!.y + field!.height <= footer!.y || field!.y >= footer!.y + footer!.height, "Focused tester limit must not be covered by the sticky footer").toBe(true);
+        // Native keyboard focus starts smooth scrolling; geometry settles asynchronously.
+        await expect.poll(async () => {
+          const field = await limit.boundingBox();
+          const footer = await builderPage.locator("form div.sticky").boundingBox();
+          return {
+            inViewport: Boolean(field && field.y >= 0 && field.y + field.height <= viewport.height),
+            clearOfFooter: Boolean(field && footer && (field.y + field.height <= footer.y || field.y >= footer.y + footer.height)),
+          };
+        }, { message: "Keyboard-focused tester limit must be visible and not covered by the sticky footer" })
+          .toEqual({ inViewport: true, clearOfFooter: true });
       }
       await builderPage.screenshot({ path: testInfo.outputPath(`audience-${viewport.width}.png`), fullPage: true });
       await checkAccessibility(builderPage, testInfo.outputPath(`audience-dark-${viewport.width}.png`));

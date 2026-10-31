@@ -4,6 +4,7 @@ import { auth } from "@/src/lib/auth";
 import { prisma } from "@/src/lib/db";
 import { getServerEnv } from "@/src/lib/env";
 import { AppError } from "@/src/lib/errors";
+import { safeReturnTo } from "@/src/lib/redirect";
 
 export async function getSession() {
   return auth.api.getSession({ headers: await headers() });
@@ -42,13 +43,14 @@ export async function requireTesterSession(returnTo = "/tester") {
   return session;
 }
 
-export async function requireBuilderSession() {
+export async function requireBuilderSession(destination?: string) {
+  const returnTo = safeReturnTo(destination ?? (await headers()).get("x-seekerhub-return-to"), "/builder");
   const session = await getSession();
-  if (!session || session.user.isAnonymous) redirect("/sign-in?intent=builder&returnTo=/builder");
-  if (!session.user.emailVerified) redirect("/verify-email?returnTo=/builder");
+  if (!session || session.user.isAnonymous) redirect(`/sign-in?intent=builder&returnTo=${encodeURIComponent(returnTo)}`);
+  if (!session.user.emailVerified) redirect(`/verify-email?email=${encodeURIComponent(session.user.email)}&returnTo=${encodeURIComponent(returnTo)}`);
 
   const builderProfile = await findBuilderProfile(session.user);
-  if (!builderProfile) redirect("/builder/onboarding");
+  if (!builderProfile) redirect(`/builder/onboarding?returnTo=${encodeURIComponent(returnTo)}`);
   if (builderProfile.status === "SUSPENDED") redirect("/account-suspended");
 
   return { ...session, builderProfile };

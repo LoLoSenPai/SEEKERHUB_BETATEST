@@ -53,7 +53,7 @@ export async function POST(request: Request) {
       sessionId: uploadSession.id,
       uploadUrl,
       expiresAt,
-      reservedBytes: body.fileSize,
+      reservedBytes: Number(uploadSession.reservedBytes),
     });
   } catch (error) {
     if (reservedSessionId) await releaseUploadReservation(reservedSessionId).catch((cleanupError) => {

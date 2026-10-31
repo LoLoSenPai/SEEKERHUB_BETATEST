@@ -22,16 +22,7 @@ export default async function BuilderDashboardPage() {
       subtitle="Manage Android projects, upload private APK releases, invite testers, and watch the beta funnel move."
       identityLabel={session.user.email}
     >
-      <div className="space-y-6">
-        <div className="grid gap-4 xl:grid-cols-3 md:grid-cols-2">
-          <StatCard label="Projects" value={stats.projectCount} hint="Builder-owned apps" />
-          <StatCard label="Releases" value={stats.releaseCount} hint="Published beta builds" />
-          <StatCard label="Claims" value={stats.claims} hint="Invite links accepted" />
-          <StatCard label="Granted places" value={stats.grantedPlaces} hint={`${stats.uniqueTesters} unique testers`} />
-          <StatCard label="Unique views" value={stats.uniqueViews} hint="Release pages opened" />
-          <StatCard label="Download links" value={stats.downloads} hint={`${stats.feedback} feedback reports`} />
-        </div>
-
+      <div className="flex flex-col gap-6">
         <Card className="rounded-[1.75rem]">
           <CardHeader className="flex items-start justify-between gap-4 sm:flex-row">
             <div>
@@ -51,17 +42,17 @@ export default async function BuilderDashboardPage() {
                   className="block rounded-[1.4rem] border border-border bg-card p-5 transition hover:-translate-y-0.5 hover:bg-muted/60 hover:shadow-md"
                 >
                   <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-3">
-                        <h3 className="text-xl font-semibold">{project.name}</h3>
+                    <div className="min-w-0 space-y-2">
+                      <div className="flex flex-wrap items-center gap-3">
+                        <h3 className="min-w-0 max-w-full break-words text-xl font-semibold">{project.name}</h3>
                         <Badge variant="brand">{formatRelativeCount(project.releases.length, "release")}</Badge>
                       </div>
-                      <p className="max-w-2xl text-sm leading-7 text-muted-foreground">
+                      <p className="max-w-2xl break-words text-sm leading-7 text-muted-foreground">
                         {project.description || "No project description yet."}
                       </p>
                     </div>
                     <div className="grid gap-2 text-right text-sm text-muted-foreground">
-                      <div>{project.releases.reduce((sum, release) => sum + release.downloadEvents.length, 0)} downloads</div>
+                      <div>{project.releases.reduce((sum, release) => sum + release.downloadEvents.length, 0)} download links</div>
                       <div>{project.releases.reduce((sum, release) => sum + release.feedbackReports.length, 0)} feedback reports</div>
                       <div>{project.releases.reduce((sum, release) => sum + release.inviteLinks.length, 0)} invite links</div>
                     </div>
@@ -85,6 +76,15 @@ export default async function BuilderDashboardPage() {
             )}
           </CardContent>
         </Card>
+        <div className="grid gap-4 xl:grid-cols-3 md:grid-cols-2">
+          <StatCard label="Projects" value={stats.projectCount} hint="Builder-owned apps" />
+          <StatCard label="Releases" value={stats.releaseCount} hint="Non-trashed releases, including drafts" />
+          <StatCard label="Claims" value={stats.claims} hint="Invite links accepted" />
+          <StatCard label="Granted places" value={stats.grantedPlaces} hint={`${stats.uniqueTesters} unique testers`} />
+          <StatCard label="Unique views" value={stats.uniqueViews} hint="Release pages opened" />
+          <StatCard label="Download links" value={stats.downloads} hint={`${stats.feedback} feedback reports`} />
+        </div>
+
         <Card className="rounded-[1.75rem]"><CardHeader><CardTitle>Builder quota</CardTitle><CardDescription>Trash continues counting until the storage deletion job completes.</CardDescription></CardHeader><CardContent className="grid gap-2 text-sm text-muted-foreground sm:grid-cols-2 xl:grid-cols-4"><div>{stats.retainedProjectCount} / {session.builderProfile.maxProjects} projects</div><div>{stats.retainedReleaseCount} / {session.builderProfile.maxStoredReleases} retained releases</div><div>{formatBytes(session.builderProfile.maxApkBytes)} maximum per APK</div><div>{formatBytes(session.builderProfile.usedStorageBytes + session.builderProfile.reservedStorageBytes)} / {formatBytes(session.builderProfile.maxStorageBytes)} storage</div></CardContent></Card>
       </div>
     </DashboardFrame>

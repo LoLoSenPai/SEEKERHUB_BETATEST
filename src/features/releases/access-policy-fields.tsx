@@ -1,14 +1,17 @@
 "use client";
 
-import { useState } from "react";
+import { useActionState, useState } from "react";
 import { ArrowRight, Check, Link2, ShieldCheck, Users, WalletCards } from "lucide-react";
 import { FieldHelp, FieldLabel } from "@/src/components/ui/field-help";
+import { Button } from "@/src/components/ui/button";
 import { Input } from "@/src/components/ui/input";
 import { Select } from "@/src/components/ui/select";
 import { Textarea } from "@/src/components/ui/textarea";
 import { cn } from "@/src/lib/utils";
+import { isPolicyAudienceBroadened } from "@/src/lib/access";
+import { updateReleasePolicyAction, type ReleasePolicyFormState } from "@/src/features/releases/actions";
 
-type AccessPreset = "invite" | "group" | "wallet" | "seeker";
+type AccessPreset = "invite" | "group" | "wallet" | "seeker" | "custom";
 
 type PolicyDefaults = {
   requireInviteAcceptance?: boolean;
@@ -28,8 +31,8 @@ const presets: Array<{
 }> = [
   {
     id: "invite",
-    title: "Limited invite link",
-    description: "Share one link, then choose its tester limit when you create the invitation.",
+    title: "Private invite link",
+    description: "Share one link. Choose a tester limit or keep it unlimited.",
     icon: Link2,
   },
   {
@@ -50,46 +53,63 @@ const presets: Array<{
     description: "A shared invite works only after the tester proves current Seeker Genesis Token ownership.",
     icon: ShieldCheck,
   },
+  {
+    id: "custom",
+    title: "Combined requirements",
+    description: "Combine invite, group, wallet and Seeker rules. All selected requirements apply.",
+    icon: ShieldCheck,
+  },
 ];
 
 function inferPreset(defaults: PolicyDefaults): AccessPreset {
+  if ((defaults.testerGroupId && (defaults.requireVerifiedSeeker || defaults.walletAllowlist?.trim())) ||
+    (defaults.requireVerifiedSeeker && defaults.walletAllowlist?.trim()) ||
+    (defaults.requireInviteAcceptance === false && (!defaults.requireLinkedWallet || !defaults.walletAllowlist?.trim())) ||
+    (defaults.testerGroupId && defaults.requireInviteAcceptance === false)) return "custom";
   if (defaults.requireVerifiedSeeker && defaults.requireInviteAcceptance) return "seeker";
   if (defaults.testerGroupId) return "group";
   if (!defaults.requireInviteAcceptance && defaults.requireLinkedWallet) return "wallet";
   return "invite";
 }
 
-export function AccessPolicyFields({
-  groups,
-  defaults = {},
-}: {
+export type AccessPolicyFieldsProps = {
   groups: Array<{ id: string; name: string }>;
   defaults?: PolicyDefaults;
-}) {
+  confirmBroaderAudience?: boolean;
+};
+
+export function AccessPolicyFields({ groups, defaults = {}, confirmBroaderAudience = true }: AccessPolicyFieldsProps) {
   const [preset, setPreset] = useState<AccessPreset>(() => inferPreset(defaults));
   const [requireInvite, setRequireInvite] = useState(defaults.requireInviteAcceptance ?? true);
   const [groupId, setGroupId] = useState(defaults.testerGroupId ?? "");
-  const [requireWallet, setRequireWallet] = useState(defaults.requireLinkedWallet ?? false);
+  const [requireWallet, setRequireWallet] = useState(Boolean(defaults.requireLinkedWallet || defaults.requireVerifiedSeeker || defaults.walletAllowlist?.trim()));
   const [requireSeeker, setRequireSeeker] = useState(defaults.requireVerifiedSeeker ?? false);
   const [recommendMobile, setRecommendMobile] = useState(defaults.requireSolanaMobile ?? true);
   const [allowPrevious, setAllowPrevious] = useState(defaults.allowPreviousReleases ?? false);
   const [allowlist, setAllowlist] = useState(defaults.walletAllowlist ?? "");
+  const audienceBroadened = isPolicyAudienceBroadened(
+    { ...defaults, walletAllowlist: splitAllowlist(defaults.walletAllowlist ?? "") },
+    { requireInviteAcceptance: requireInvite, testerGroupId: groupId, requireLinkedWallet: requireWallet,
+      requireVerifiedSeeker: requireSeeker, allowPreviousReleases: allowPrevious, walletAllowlist: splitAllowlist(allowlist) },
+  );
 
   function applyPreset(nextPreset: AccessPreset) {
     setPreset(nextPreset);
+    if (nextPreset === "custom") return;
     setGroupId(nextPreset === "group" ? groupId : "");
     setRequireInvite(nextPreset !== "wallet");
     setRequireWallet(nextPreset === "wallet" || nextPreset === "seeker");
     setRequireSeeker(nextPreset === "seeker");
+    setAllowlist(nextPreset === "wallet" ? allowlist : "");
   }
 
-  const accessSteps = preset === "wallet"
-    ? ["Tester signs in", "Links an allowlisted wallet", "Downloads the APK"]
-    : preset === "seeker"
-      ? ["Claims the invite", "Links a wallet", "Verifies Seeker ownership", "Downloads the APK"]
-      : preset === "group"
-        ? ["Claims the group invite", "Receives a group place", "Downloads the APK"]
-        : ["Claims the invite", "Receives an eligible tester place", "Downloads the APK"];
+  const accessSteps = [
+    requireInvite ? "Claims the invite" : "Tester signs in",
+    ...(groupId ? ["Joins the required tester group"] : []),
+    ...(requireWallet || allowlist.trim() ? [allowlist.trim() ? "Links an allowlisted wallet" : "Links a wallet"] : []),
+    ...(requireSeeker ? ["Verifies Seeker ownership"] : []),
+    "Downloads the APK",
+  ];
 
   return (
     <div className="grid min-w-0 gap-6">
@@ -108,7 +128,7 @@ export function AccessPolicyFields({
               <label
                 key={option.id}
                 className={cn(
-                  "relative flex cursor-pointer gap-3 rounded-2xl border p-4 transition",
+                  "relative flex cursor-pointer gap-3 rounded-2xl border p-4 transition focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 focus-within:ring-offset-background",
                   selected ? "border-brand bg-brand/10 shadow-sm" : "border-border bg-card hover:bg-muted/50",
                 )}
               >
@@ -136,42 +156,39 @@ export function AccessPolicyFields({
         </div>
       </fieldset>
 
-      {preset === "group" ? (
-        <div className="grid gap-2">
-          <FieldLabel
-            htmlFor="testerGroupId"
-            helpTitle="Tester group"
-            help="Groups are reusable cohorts. Create one first, then use an invite scoped to that same group."
-          >
-            Tester group
-          </FieldLabel>
-          <Select id="testerGroupId" name="testerGroupId" value={groupId} onChange={(event) => setGroupId(event.target.value)} required>
-            <option value="">Select a tester group</option>
-            {groups.map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}
-          </Select>
-          {!groups.length ? <p className="text-xs text-danger">Create a tester group before using this preset.</p> : null}
-        </div>
-      ) : <input type="hidden" name="testerGroupId" value="" />}
+      <div hidden={preset !== "group" && preset !== "custom" && !groupId} className="space-y-2">
+        <FieldLabel
+          htmlFor="testerGroupId"
+          helpTitle="Tester group"
+          help="Groups are reusable cohorts. Create one first, then use an invite scoped to that same group."
+        >
+          Tester group
+        </FieldLabel>
+        <Select id="testerGroupId" name="testerGroupId" value={groupId} onChange={(event) => { setGroupId(event.target.value); setPreset("custom"); }} required={preset === "group"}>
+          <option value="">No tester group requirement</option>
+          {groupId && !groups.some((group) => group.id === groupId) ? <option value={groupId}>Current group (unavailable)</option> : null}
+          {groups.map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}
+        </Select>
+        {!groups.length && preset === "group" ? <p className="text-xs text-danger">Create a tester group before using this preset.</p> : null}
+      </div>
 
-      {(preset === "wallet" || (requireWallet && preset !== "seeker")) ? (
-        <div className="grid gap-2">
-          <FieldLabel
-            htmlFor="walletAllowlist"
-            helpTitle="Wallet allowlist"
-            help="Enter one Solana address per line to restrict access to exact wallets. Leave it empty to accept any linked wallet."
-          >
-            Allowed Solana wallets
-          </FieldLabel>
-          <Textarea
-            id="walletAllowlist"
-            name="walletAllowlist"
-            value={allowlist}
-            onChange={(event) => setAllowlist(event.target.value)}
-            placeholder={"9x...abc\n7Q...def"}
-            required={preset === "wallet"}
-          />
-        </div>
-      ) : <input type="hidden" name="walletAllowlist" value="" />}
+      <div hidden={preset !== "wallet" && preset !== "custom" && !allowlist.trim()} className="space-y-2">
+        <FieldLabel
+          htmlFor="walletAllowlist"
+          helpTitle="Wallet allowlist"
+          help="Enter one Solana address per line to restrict access to exact wallets. Leave it empty to accept any linked wallet."
+        >
+          Allowed Solana wallets
+        </FieldLabel>
+        <Textarea
+          id="walletAllowlist"
+          name="walletAllowlist"
+          value={allowlist}
+          onChange={(event) => { setAllowlist(event.target.value); setPreset("custom"); }}
+          placeholder={"9x...abc\n7Q...def"}
+          required={preset === "wallet"}
+        />
+      </div>
 
       <div className="rounded-2xl border border-brand/20 bg-brand/5 p-4">
         <div className="text-xs font-semibold uppercase tracking-[0.18em] text-brand">Tester journey</div>
@@ -184,26 +201,28 @@ export function AccessPolicyFields({
           ))}
         </div>
         <p className="mt-3 text-xs leading-5 text-muted-foreground">
-          {preset === "wallet"
+          {!requireInvite
             ? "Share your tester dashboard URL. The release appears only after an allowed wallet is linked."
-            : "After publishing, create an invite link and choose its Tester limit. Ineligible wallet or SGT claims do not consume a tester place."}
+            : "The invite's tester limit applies only to eligible claims. A wallet or SGT requirement must be met before a place is granted."}
         </p>
       </div>
 
-      <div className="grid gap-3 rounded-2xl border border-border bg-card p-4 sm:grid-cols-2">
+      <details open={preset === "custom" ? true : undefined} className="rounded-2xl border border-border bg-card p-4">
+        <summary className="cursor-pointer text-sm font-semibold">Additional requirements and older versions</summary>
+        <p className="mt-2 text-xs leading-5 text-muted-foreground">Optional refinements. Your selected audience already sets the required access rules.</p>
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
         <PolicyCheckbox
           name="requireInviteAcceptance"
           checked={requireInvite}
-          onChange={setRequireInvite}
-          disabled
+          onChange={(checked) => { setRequireInvite(checked); setPreset("custom"); }}
           label="Require an invite link"
-          help="Enabled for limited-link, group, and Seeker presets. You choose the number of eligible testers later, when creating the share link."
+          help="Enabled for invite, group, and Seeker presets. Set the number of eligible testers in the share-link settings."
         />
         <PolicyCheckbox
           name="requireLinkedWallet"
-          checked={requireWallet}
-          onChange={setRequireWallet}
-          disabled={preset === "wallet" || preset === "seeker"}
+          checked={requireWallet || requireSeeker || Boolean(allowlist.trim())}
+          onChange={(checked) => { setRequireWallet(checked); setPreset("custom"); }}
+          disabled={requireSeeker || Boolean(allowlist.trim())}
           label="Require wallet verification"
           help="The tester must connect a compatible Solana wallet and sign a challenge to prove control. Merely having Phantom, Solflare, or Seed Vault installed is not enough."
         />
@@ -212,9 +231,9 @@ export function AccessPolicyFields({
           checked={requireSeeker}
           onChange={(checked) => {
             setRequireSeeker(checked);
+            setPreset("custom");
             if (checked) setRequireWallet(true);
           }}
-          disabled={preset === "seeker"}
           label="Require verified Seeker (SGT)"
           help="Blocks download until the linked wallet has a recent server-side Seeker Genesis Token verification."
         />
@@ -232,8 +251,39 @@ export function AccessPolicyFields({
           label="Let testers access older versions"
           help="Lets an eligible tester browse earlier published builds of this app. It does not grant access to future releases, which keep their own access rules."
         />
-      </div>
+        </div>
+      </details>
+      {confirmBroaderAudience && audienceBroadened ? (
+        <label className="flex items-start gap-3 rounded-xl border border-danger/30 p-4 text-sm">
+          <input type="checkbox" name="confirmAudienceBroadening" required className="mt-1" />
+          <span>I confirm this change may give more testers access, including by removing requirements or allowing older builds.</span>
+        </label>
+      ) : null}
     </div>
+  );
+}
+
+function splitAllowlist(value: string) {
+  return value.split(/\r?\n/).map((address) => address.trim()).filter(Boolean);
+}
+
+const initialPolicyState: ReleasePolicyFormState = { status: "idle", message: "" };
+
+export function ReleasePolicyEditor({ releaseId, projectSlug, groups, defaults }: AccessPolicyFieldsProps & {
+  releaseId: string;
+  projectSlug: string;
+}) {
+  const [state, action, pending] = useActionState(updateReleasePolicyAction, initialPolicyState);
+  return (
+    <form action={action} className="grid gap-5" aria-busy={pending}>
+      <input type="hidden" name="releaseId" value={releaseId} />
+      <input type="hidden" name="projectSlug" value={projectSlug} />
+      <AccessPolicyFields groups={groups} defaults={defaults} />
+      {state.message ? <p role={state.status === "error" ? "alert" : "status"}>{state.message}</p> : null}
+      <Button type="submit" disabled={pending}>
+        {pending ? "Saving..." : "Save access policy"}
+      </Button>
+    </form>
   );
 }
 

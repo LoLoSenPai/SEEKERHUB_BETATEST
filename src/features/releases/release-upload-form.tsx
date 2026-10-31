@@ -1,214 +1,99 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2, UploadCloud } from "lucide-react";
+import { ArrowRight, Loader2, UploadCloud } from "lucide-react";
 import { Button } from "@/src/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/src/components/ui/card";
 import { Input } from "@/src/components/ui/input";
 import { Label } from "@/src/components/ui/label";
-import { FieldLabel } from "@/src/components/ui/field-help";
-import { Textarea } from "@/src/components/ui/textarea";
-import { AccessPolicyFields } from "@/src/features/releases/access-policy-fields";
 import { formatBytes } from "@/src/lib/utils";
 
-type GroupOption = {
-  id: string;
-  name: string;
-};
-
-export function ReleaseUploadForm({
-  projectId,
-  projectSlug,
-  groups,
-  maxApkBytes,
-}: {
+export function ReleaseUploadForm({ projectId, projectSlug, maxApkBytes }: {
   projectId: string;
   projectSlug: string;
-  groups: GroupOption[];
   maxApkBytes: number;
 }) {
   const router = useRouter();
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState(0);
-  const [uploadStage, setUploadStage] = useState<"idle" | "reserving" | "uploading" | "validating">("idle");
+  const inFlight = useRef(false);
+  const pendingSession = useRef<string | null>(null);
+  const [retryValidation, setRetryValidation] = useState(false);
+  const [file, setFile] = useState<File | null>(null);
+  const [error, setError] = useState("");
+  const [stage, setStage] = useState<"idle" | "reserving" | "uploading" | "validating">("idle");
+  const [progress, setProgress] = useState(0);
+  const busy = stage !== "idle";
 
-  return (
-    <Card className="rounded-[2rem]">
-      <CardHeader>
-        <div className="section-eyebrow">New release</div>
-        <CardTitle>Upload a release APK</CardTitle>
-        <CardDescription>
-          Create a release draft, upload the signed APK to private storage, inspect file metadata, then publish the release.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <form
-          className="grid gap-5"
-          onSubmit={async (event) => {
-            event.preventDefault();
-            setError(null);
-            setLoading(true);
-            setUploadStage("reserving");
-            setUploadProgress(0);
+  async function upload() {
+    if (inFlight.current || !file) return;
+    if (!/\.apk$/i.test(file.name) || file.size <= 0) { setError("Choose one non-empty .apk file, not an AAB or ZIP bundle."); return; }
+    if (file.size > maxApkBytes) { setError(`This APK is ${formatBytes(file.size)}. Your per-APK limit is ${formatBytes(maxApkBytes)}.`); return; }
+    inFlight.current = true; setError("");
+    try {
+      if (!pendingSession.current) {
+        setStage("reserving"); setProgress(0);
+        const contentType = file.type || "application/vnd.android.package-archive";
+        const response = await fetch("/api/uploads/releases", {
+          method: "POST", headers: { "content-type": "application/json" },
+          body: JSON.stringify({ projectId, fileName: file.name, contentType, fileSize: file.size,
+            draft: { projectId, versionName: "manifest-source-of-truth", versionCode: 1, changelog: "Draft release", accessPolicy: {
+              requireInviteAcceptance: true, requireLinkedWallet: false, requireVerifiedSeeker: false,
+              requireSolanaMobile: false, allowPreviousReleases: false, testerGroupId: null, walletAllowlist: [],
+            } },
+          }),
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error ?? "Unable to reserve storage. Please try again.");
+        setStage("uploading");
+        await new Promise<void>((resolve, reject) => {
+          const xhr = new XMLHttpRequest();
+          xhr.open("PUT", result.uploadUrl);
+          xhr.setRequestHeader("content-type", contentType);
+          xhr.upload.onprogress = (event) => { if (event.lengthComputable) setProgress(Math.round(event.loaded / event.total * 100)); };
+          xhr.onload = () => xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new Error("Storage rejected the upload. Please try again."));
+          xhr.onerror = () => reject(new Error("Upload interrupted. Check your connection and try again."));
+          xhr.timeout = 20 * 60 * 1000;
+          xhr.ontimeout = () => reject(new Error("Upload timed out. Please try again on a faster connection."));
+          xhr.send(file);
+        });
+        pendingSession.current = result.sessionId;
+        setRetryValidation(true);
+      }
+      setStage("validating");
+      const response = await fetch(`/api/uploads/releases/${pendingSession.current}/finalize`, { method: "POST" });
+      const result = await response.json().catch(() => null);
+      if (!response.ok) {
+        // Retry the saved upload after a transient validation failure, not another copy.
+        if ([400, 404, 410, 413, 422].includes(response.status)) { pendingSession.current = null; setRetryValidation(false); }
+        throw new Error(result?.error ?? "APK validation could not finish. Retry to continue with the saved upload.");
+      }
+      router.push(`/builder/apps/${projectSlug}/releases/${result.releaseId}`);
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "Upload failed. Please try again."); }
+    finally { inFlight.current = false; setStage("idle"); }
+  }
 
-            try {
-            const form = event.currentTarget;
-            const formData = new FormData(form);
-            const file = formData.get("apk") as File | null;
-
-            if (!file) {
-              setError("Select an APK file first.");
-              setLoading(false);
-              return;
-            }
-
-            if (file.size > maxApkBytes) {
-              setError(`This APK is ${formatBytes(file.size)}. Your current per-APK limit is ${formatBytes(maxApkBytes)}.`);
-              setLoading(false);
-              return;
-            }
-
-            const selectedAccessMode = String(formData.get("accessPreset") ?? "invite");
-            const selectedTesterGroupId = String(formData.get("testerGroupId") ?? "").trim();
-            const selectedWalletAllowlist = String(formData.get("walletAllowlist") ?? "")
-              .split(/\r?\n/)
-              .map((item) => item.trim())
-              .filter(Boolean);
-
-            if (selectedAccessMode === "group" && !selectedTesterGroupId) {
-              setError("Select a tester group for the group-restricted preset.");
-              setLoading(false);
-              return;
-            }
-
-            if (selectedAccessMode === "wallet" && selectedWalletAllowlist.length === 0) {
-              setError("Add at least one Solana address for the wallet allowlist preset.");
-              setLoading(false);
-              return;
-            }
-
-            const draft = {
-              projectId,
-              versionName: "manifest-source-of-truth",
-              versionCode: 1,
-              changelog: String(formData.get("changelog") ?? ""),
-              accessPolicy: {
-                requireInviteAcceptance: formData.get("requireInviteAcceptance") === "on",
-                testerGroupId: selectedTesterGroupId || null,
-                requireLinkedWallet: formData.get("requireLinkedWallet") === "on",
-                requireSolanaMobile: formData.get("requireSolanaMobile") === "on",
-                requireVerifiedSeeker: formData.get("requireVerifiedSeeker") === "on",
-                allowPreviousReleases: formData.get("allowPreviousReleases") === "on",
-                walletAllowlist: selectedWalletAllowlist,
-              },
-            };
-
-            const sessionResponse = await fetch("/api/uploads/releases", {
-              method: "POST",
-              headers: {
-                "content-type": "application/json",
-              },
-              body: JSON.stringify({
-                projectId,
-                fileName: file.name,
-                contentType: file.type || "application/vnd.android.package-archive",
-                fileSize: file.size,
-                draft,
-              }),
-            });
-
-            if (!sessionResponse.ok) {
-              const payload = await sessionResponse.json().catch(() => null);
-              setError(payload?.error ?? "Unable to create the upload session.");
-              setLoading(false);
-              return;
-            }
-
-            const { uploadUrl, sessionId } = (await sessionResponse.json()) as {
-              uploadUrl: string;
-              sessionId: string;
-            };
-
-            setUploadStage("uploading");
-            await new Promise<void>((resolve, reject) => {
-              const xhr = new XMLHttpRequest();
-              xhr.open("PUT", uploadUrl);
-              xhr.setRequestHeader("content-type", file.type || "application/vnd.android.package-archive");
-              xhr.upload.onprogress = (progressEvent) => {
-                if (progressEvent.lengthComputable) setUploadProgress(Math.round((progressEvent.loaded / progressEvent.total) * 100));
-              };
-              xhr.onload = () => xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new Error("R2 rejected the APK upload."));
-              xhr.onerror = () => reject(new Error("The APK upload was interrupted."));
-              xhr.send(file);
-            });
-
-            setUploadStage("validating");
-            const finalizeResponse = await fetch(`/api/uploads/releases/${sessionId}/finalize`, {
-              method: "POST",
-            });
-
-            const finalizePayload = await finalizeResponse.json().catch(() => null);
-
-            if (!finalizeResponse.ok) {
-              setError(finalizePayload?.error ?? "Release finalization failed.");
-              setLoading(false);
-              return;
-            }
-
-            router.push(`/builder/apps/${projectSlug}/releases/${finalizePayload.releaseId}`);
-            router.refresh();
-          } catch (caught) {
-            setError(caught instanceof Error ? caught.message : "Release upload failed.");
-          } finally {
-            setLoading(false);
-          }}}
-        >
-          <div className="grid gap-4 rounded-[1.5rem] border border-border bg-muted/60 p-5">
-            <div className="section-eyebrow">1 - APK</div>
-            <div>
-              <h3 className="font-semibold text-foreground">Select the Android build</h3>
-              <p className="mt-1 text-sm leading-6 text-muted-foreground">Package, version, and SDK metadata are read from AndroidManifest.xml. Use a signed release APK, not an AAB or debug bundle.</p>
-            </div>
-            <div className="grid gap-2">
-              <FieldLabel
-                htmlFor="apk"
-                helpTitle="Signed release APK"
-                help="Upload the .apk produced by your release build, for example app-release.apk. SeekerHub checks its archive, manifest, size, checksum, and APK signature marker."
-              >
-                Signed APK (max {formatBytes(maxApkBytes)})
-              </FieldLabel>
-              <Input id="apk" name="apk" type="file" accept=".apk,application/vnd.android.package-archive,application/octet-stream" required />
-            </div>
-          </div>
-          <div className="grid gap-2">
-            <Label htmlFor="changelog">2 - Release notes</Label>
-            <Textarea id="changelog" name="changelog" placeholder="What changed in this release?" required />
-          </div>
-
-          <div className="grid gap-5 rounded-[1.5rem] border border-border bg-muted/60 p-5">
-            <div>
-              <div className="section-eyebrow">3 - Audience</div>
-              <h3 className="mt-2 font-semibold text-foreground">Choose how testers get this build</h3>
-              <p className="mt-1 text-sm leading-6 text-muted-foreground">
-                Pick the closest sharing model. You can change it later without uploading the APK again.
-              </p>
-            </div>
-            <AccessPolicyFields groups={groups} />
-          </div>
-
-          <div aria-live="polite">
-            {loading ? <div className="grid gap-2 rounded-2xl border border-border bg-muted/50 p-4"><div className="flex items-center justify-between text-sm"><span>{uploadStage === "reserving" ? "Reserving private storage" : uploadStage === "uploading" ? "Uploading APK to R2" : "Validating archive and Android manifest"}</span><span>{uploadStage === "uploading" ? `${uploadProgress}%` : ""}</span></div><div className="h-2 overflow-hidden rounded-full bg-card"><div className="h-full bg-brand transition-[width]" style={{ width: uploadStage === "uploading" ? `${uploadProgress}%` : uploadStage === "validating" ? "100%" : "8%" }} /></div></div> : null}
-            {error ? <div className="rounded-2xl bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</div> : null}
-          </div>
-
-          <Button type="submit" size="lg" disabled={loading}>
-            {loading ? <Loader2 className="size-4 animate-spin" /> : <UploadCloud className="size-4" />}
-            {loading ? "Publishing release..." : "4 - Confirm and publish release"}
-          </Button>
-        </form>
-      </CardContent>
-    </Card>
-  );
+  return <Card className="rounded-[2rem]">
+    <CardHeader>
+      <div className="section-eyebrow">Step 1 of 4</div>
+      <CardTitle>Start with your APK</CardTitle>
+      <CardDescription>We will read its version and package for you. Next: release notes, audience, then review and publish.</CardDescription>
+    </CardHeader>
+    <CardContent>
+      <form className="space-y-6" onSubmit={(event) => { event.preventDefault(); void upload(); }}>
+        <div className="grid gap-4 rounded-2xl border border-dashed border-brand/40 bg-brand/5 p-5 sm:p-8">
+          <UploadCloud className="size-8 text-brand" aria-hidden="true" />
+          <div><Label htmlFor="apk">Choose a signed Android APK</Label><p className="mt-2 text-sm text-muted-foreground">One .apk file, up to {formatBytes(maxApkBytes)}. Nothing is published at this step.</p></div>
+          <Input id="apk" name="apk" type="file" accept=".apk,application/vnd.android.package-archive,application/octet-stream" required disabled={busy} onChange={(event) => { setFile(event.target.files?.[0] ?? null); pendingSession.current = null; setRetryValidation(false); setError(""); }} />
+          {file ? <p className="break-all text-sm font-semibold">{file.name} <span className="font-normal text-muted-foreground">({formatBytes(file.size)})</span></p> : null}
+        </div>
+        <details className="text-sm text-muted-foreground"><summary className="cursor-pointer font-medium text-foreground">Which file should I use?</summary><p className="mt-3 leading-6">Use the signed release APK from your Android build, for example app-release.apk. Do not compress it or upload an .aab, .apks, or .xapk. We check the archive, manifest and signature marker; this is not a malware scan or full signature verification.</p></details>
+        <p className="text-xs leading-5 text-muted-foreground">Checking an upload temporarily reserves twice its size. The extra copy is released after storage cleanup, normally within about 90 minutes.</p>
+        <div aria-live="polite">
+          {busy ? <div className="space-y-3 rounded-2xl bg-muted/60 p-4"><p className="text-sm">{stage === "reserving" ? "Preparing private storage..." : stage === "uploading" ? `Uploading APK: ${progress}%` : "Checking the APK and reading its version..."}</p><progress className="w-full accent-brand" max={100} value={stage === "uploading" ? progress : undefined} aria-label="APK upload progress" /><p className="text-xs text-muted-foreground">Please keep this page open. Large builds can take a few minutes.</p></div> : null}
+          {error ? <p role="alert" className="rounded-xl border border-danger/30 bg-danger/5 p-4 text-sm text-danger">{error}</p> : null}
+        </div>
+        <Button type="submit" size="lg" disabled={busy || !file} className="w-full sm:w-auto">{busy ? <Loader2 className="size-4 animate-spin" /> : <ArrowRight className="size-4" />}{busy ? "Saving your APK..." : retryValidation ? "Retry APK validation" : "Upload and check APK"}</Button>
+      </form>
+    </CardContent>
+  </Card>;
 }

@@ -6,18 +6,25 @@ import { BuilderJourney } from "@/src/components/layout/builder-journey";
 import { Badge } from "@/src/components/ui/badge";
 import { buttonVariants } from "@/src/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/src/components/ui/card";
-import { AccessPolicyFields } from "@/src/features/releases/access-policy-fields";
+import { ReleasePolicyEditor } from "@/src/features/releases/access-policy-fields";
 import { AccessPolicySummary } from "@/src/features/releases/access-policy-summary";
 import { getReleaseForOwner } from "@/src/features/projects/queries";
 import { requireBuilderSession } from "@/src/lib/session";
 import { cn, formatBytes } from "@/src/lib/utils";
 import { PendingSubmitButton } from "@/src/components/ui/pending-submit-button";
-import { setReleaseArchivedAction, trashReleaseAction, updateReleasePolicyAction } from "@/src/features/releases/actions";
+import { setReleaseArchivedAction, trashReleaseAction } from "@/src/features/releases/actions";
+import { ReleasePublishForm } from "@/src/features/releases/release-publish-form";
+import { InviteLinkCopyButton } from "@/src/features/invites/invite-link-copy-button";
+import { prisma } from "@/src/lib/db";
+import { buildInviteShareUrl, decryptInviteToken } from "@/src/lib/invite";
+import { getClientEnv } from "@/src/lib/env";
 
 export default async function BuilderReleaseDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ slug: string; releaseId: string }>;
+  searchParams: Promise<{ published?: string; invite?: string }>;
 }) {
   const { slug, releaseId } = await params;
   const session = await requireBuilderSession();
@@ -26,6 +33,39 @@ export default async function BuilderReleaseDetailPage({
   if (!release) {
     notFound();
   }
+  const query = await searchParams;
+  const defaults = {
+    requireInviteAcceptance: release.accessPolicy?.requireInviteAcceptance,
+    testerGroupId: release.accessPolicy?.testerGroupId,
+    requireLinkedWallet: release.accessPolicy?.requireLinkedWallet,
+    requireSolanaMobile: release.accessPolicy?.requireSolanaMobile,
+    requireVerifiedSeeker: release.accessPolicy?.requireVerifiedSeeker,
+    allowPreviousReleases: release.accessPolicy?.allowPreviousReleases,
+    walletAllowlist: release.accessPolicy?.walletEntries.map((entry) => entry.address).join("\n"),
+  };
+  if (release.status === "DRAFT") {
+    return <DashboardFrame kind="builder" currentPath="/builder" title={`${release.project.name}: prepare v${release.versionName}`} subtitle="Your APK is checked and saved. Finish the release details before sharing it." identityLabel={session.user.email}>
+      <Link href={`/builder/apps/${slug}`} className="mb-4 inline-flex text-sm font-semibold text-brand">Back to {release.project.name}</Link>
+      <Card className="rounded-[1.75rem]">
+        <CardHeader><div className="flex flex-wrap items-center gap-3"><CardTitle>Prepare your release</CardTitle><Badge>Draft</Badge></div><CardDescription>v{release.versionName} ({release.versionCode}) · {release.buildAsset ? formatBytes(release.buildAsset.fileSizeBytes) : "No APK"}</CardDescription></CardHeader>
+        <CardContent><ReleasePublishForm releaseId={release.id} version={release.versionName} packageName={release.project.androidPackageName ?? "Unknown package"} groups={release.project.testerGroups} initialNotes={release.changelog} defaults={defaults} /></CardContent>
+      </Card>
+      <form action={trashReleaseAction} className="mt-5"><input type="hidden" name="releaseId" value={release.id} /><input type="hidden" name="projectSlug" value={slug} /><PendingSubmitButton variant="ghost" idleLabel="Move draft to trash" pendingLabel="Moving draft..." /></form>
+    </DashboardFrame>;
+  }
+  const shareInvite = await prisma.inviteLink.findFirst({
+    where: { projectId: release.projectId, revokedAt: null, tokenCiphertext: { not: null },
+      AND: [
+        query.invite ? { id: query.invite, OR: [{ releaseId: release.id }, { releaseId: null }] } : { releaseId: release.id },
+        { OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }] },
+      ],
+    }, orderBy: { createdAt: "desc" },
+  });
+  let token: string | null = null;
+  try { token = shareInvite?.tokenCiphertext ? decryptInviteToken(shareInvite.tokenCiphertext) : null; }
+  catch { /* A retired encryption key must not make the release page unavailable. */ }
+  const shareUrl = token ? buildInviteShareUrl(token, getClientEnv().NEXT_PUBLIC_APP_URL) : null;
+  const testerUrl = `${getClientEnv().NEXT_PUBLIC_APP_URL.replace(/\/$/, "")}/tester`;
   const claims = release.inviteLinks.flatMap((invite) => invite.inviteClaims);
   const uniqueTesterIds = new Set(claims.filter((claim) => claim.grantedAt && !claim.revokedAt).map((claim) => claim.userId));
   const uniqueViewerIds = new Set(release.releaseViewEvents.map((event) => event.userId).filter(Boolean));
@@ -35,20 +75,28 @@ export default async function BuilderReleaseDetailPage({
       kind="builder"
       currentPath="/builder"
       title={`${release.project.name} ${release.versionName}`}
-      subtitle="Release metadata, access policy, and the first analytics loop in one view."
+      subtitle="Share this version, follow tester activity, and review feedback."
       identityLabel={session.user.email}
     >
       <BuilderJourney
         projectSlug={release.project.slug}
-        current={release.project.inviteLinks.length ? "review" : "invite"}
+        current="review"
         releaseCount={release.project.releases.length}
         inviteCount={release.project.inviteLinks.length}
         downloadCount={release.downloadEvents.length}
       />
+      {release.status === "PUBLISHED" ? <Card className="mb-6 rounded-[1.75rem] border-brand/30 bg-brand/5">
+        <CardHeader><CardTitle>{query.published ? "Your release is published" : "Share this release"}</CardTitle><CardDescription>{release.accessPolicy?.requireInviteAcceptance ? "Send the invite to your testers. They can download after meeting the audience requirements." : "Allowed wallets can find this release from the tester dashboard."}</CardDescription></CardHeader>
+        <CardContent className="space-y-4">
+          {shareUrl && release.accessPolicy?.requireInviteAcceptance ? <><div className="flex min-w-0 flex-wrap items-center gap-3"><code className="min-w-0 flex-1 break-all rounded-xl border border-border bg-card p-3 text-xs">{shareUrl}</code><InviteLinkCopyButton url={shareUrl} /></div><p className="text-xs text-muted-foreground">{shareInvite?.releaseId ? "This version only" : "App-wide access, including future eligible releases"} · {shareInvite?.maxUses ? `${shareInvite.maxUses} tester places` : "Unlimited places"}</p></> : <Link href={release.accessPolicy?.requireInviteAcceptance ? `/builder/apps/${slug}/invites?releaseId=${release.id}` : "/tester"} className={buttonVariants()}>{release.accessPolicy?.requireInviteAcceptance ? "Create an invite for this version" : "Open tester dashboard"}</Link>}
+          <p className="text-sm text-muted-foreground">Next: ask testers to install the build, try the release notes, and leave feedback below their download.</p>
+          {!release.accessPolicy?.requireInviteAcceptance ? <div className="flex min-w-0 flex-wrap items-center gap-3"><code className="min-w-0 flex-1 break-all rounded-xl border border-border bg-card p-3 text-xs">{testerUrl}</code><InviteLinkCopyButton url={testerUrl} label="Copy tester dashboard link" /></div> : null}
+        </CardContent>
+      </Card> : <p role="status" className="mb-6 rounded-xl border border-border p-4 text-sm">This release is archived and cannot be downloaded. Restore it below when you are ready to share it again.</p>}
       <Card className="mb-6 rounded-[1.75rem] border-brand/25 bg-brand/5">
         <CardContent className="grid gap-4 p-5 sm:grid-cols-3">
           <Link href={`/builder/apps/${release.project.slug}`} className={cn(buttonVariants({ variant: "secondary" }), "justify-center")}>Back to app</Link>
-          <Link href={`/builder/apps/${release.project.slug}/invites`} className={cn(buttonVariants(), "justify-center")}>Create or copy invite</Link>
+          <Link href={`/builder/apps/${release.project.slug}/invites?releaseId=${release.id}`} className={cn(buttonVariants({ variant: "secondary" }), "justify-center")}>Manage invite links</Link>
           <Link href={`/builder/apps/${release.project.slug}/groups`} className={cn(buttonVariants({ variant: "secondary" }), "justify-center")}>Manage tester groups</Link>
         </CardContent>
       </Card>
@@ -86,13 +134,14 @@ export default async function BuilderReleaseDetailPage({
         />
       </div>
 
-      <Card className="mt-6 rounded-[1.75rem]">
+      <details className="mt-6 rounded-[1.75rem] border border-border bg-card p-5">
+        <summary className="cursor-pointer font-semibold">Change who can access this release</summary>
+        <Card className="mt-4 border-0 shadow-none">
         <CardHeader><CardTitle>Edit access policy</CardTitle><CardDescription>Allowlist entries automatically require a linked wallet. Device capability remains advisory; only a current SGT proof is a Seeker gate.</CardDescription></CardHeader>
         <CardContent>
-          <form action={updateReleasePolicyAction} className="grid gap-5">
-            <input type="hidden" name="releaseId" value={release.id} />
-            <input type="hidden" name="projectSlug" value={release.project.slug} />
-            <AccessPolicyFields
+            <ReleasePolicyEditor
+              releaseId={release.id}
+              projectSlug={release.project.slug}
               groups={release.project.testerGroups.map((group) => ({ id: group.id, name: group.name }))}
               defaults={{
                 requireInviteAcceptance: release.accessPolicy?.requireInviteAcceptance,
@@ -104,10 +153,9 @@ export default async function BuilderReleaseDetailPage({
                 walletAllowlist: release.accessPolicy?.walletEntries.map((entry) => entry.address).join("\n"),
               }}
             />
-            <PendingSubmitButton idleLabel="Save access policy" pendingLabel="Saving policy..." />
-          </form>
         </CardContent>
-      </Card>
+        </Card>
+      </details>
 
       <div className="mt-6 grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
         <Card className="rounded-[1.75rem]">

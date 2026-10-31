@@ -4,6 +4,29 @@ import { AppError } from "@/src/lib/errors";
 import { isTransactionConflict } from "@/src/lib/prisma-errors";
 
 export const DEFAULT_MAX_APK_BYTES = 250 * 1024 * 1024;
+export const UPLOAD_STAGING_CLEANUP_GRACE_MS = 60 * 60_000;
+
+export function inspectedApkKey(projectId: string, sessionId: string) {
+  return `projects/${projectId}/inspected-apks/${sessionId}/release.apk`;
+}
+
+export function uploadCleanupAt(expiresAt: Date) {
+  return new Date(expiresAt.getTime() + UPLOAD_STAGING_CLEANUP_GRACE_MS);
+}
+
+async function scheduleUploadCleanup(tx: Prisma.TransactionClient, upload: {
+  id: string; projectId: string; storageKey: string; expiresAt: Date; completedAt: Date | null;
+}) {
+  const objects = [{ storageKey: upload.storageKey, resourceType: "UploadStaging" }];
+  if (!upload.completedAt) objects.push({ storageKey: inspectedApkKey(upload.projectId, upload.id), resourceType: "UploadFinal" });
+  for (const { storageKey, resourceType } of objects) {
+    await tx.storageDeletionTask.upsert({
+      where: { storageKey },
+      create: { storageKey, resourceType, resourceId: upload.id, scheduledFor: uploadCleanupAt(upload.expiresAt) },
+      update: { status: "PENDING", scheduledFor: uploadCleanupAt(upload.expiresAt), completedAt: null, attempts: 0, lastError: null },
+    });
+  }
+}
 
 export async function reserveUploadQuota(input: {
   userId: string;
@@ -29,12 +52,16 @@ export async function reserveUploadQuota(input: {
           }
 
           const bytes = BigInt(input.bytes);
+          const reservedBytes = bytes * 2n;
           if (bytes > profile.maxApkBytes) {
             throw new AppError("This APK exceeds your per-build upload limit.", 413, "APK_QUOTA_EXCEEDED");
           }
 
-          if (profile.usedStorageBytes + profile.reservedStorageBytes + bytes > profile.maxStorageBytes) {
-            throw new AppError("This upload would exceed your storage quota.", 413, "STORAGE_QUOTA_EXCEEDED");
+          if (profile.usedStorageBytes + profile.reservedStorageBytes + reservedBytes > profile.maxStorageBytes) {
+            throw new AppError(
+              "This upload needs temporary capacity for two APK copies (upload and inspected build). Free storage or choose a smaller APK before uploading.",
+              413, "STORAGE_QUOTA_EXCEEDED",
+            );
           }
 
           const releaseCount = await tx.release.count({
@@ -54,10 +81,10 @@ export async function reserveUploadQuota(input: {
 
           await tx.builderProfile.update({
             where: { userId: input.userId },
-            data: { reservedStorageBytes: { increment: bytes } },
+            data: { reservedStorageBytes: { increment: reservedBytes } },
           });
 
-          return tx.releaseUploadSession.create({
+          const upload = await tx.releaseUploadSession.create({
             data: {
               projectId: input.projectId,
               userId: input.userId,
@@ -65,11 +92,13 @@ export async function reserveUploadQuota(input: {
               originalFileName: input.fileName,
               contentType: input.contentType,
               expectedSize: bytes,
-              reservedBytes: bytes,
+              reservedBytes,
               draftJson: input.draft,
               expiresAt: input.expiresAt,
             },
           });
+          await scheduleUploadCleanup(tx, upload);
+          return upload;
         },
         { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
       );
@@ -83,27 +112,19 @@ export async function reserveUploadQuota(input: {
 }
 
 export async function releaseUploadReservation(sessionId: string) {
-  await prisma.$transaction(async (tx) => {
-    const upload = await tx.releaseUploadSession.findUnique({ where: { id: sessionId } });
-    if (!upload || upload.reservationReleasedAt || upload.completedAt) return;
-
-    await tx.releaseUploadSession.update({
-      where: { id: sessionId },
-      data: { reservationReleasedAt: new Date(), finalizingAt: null },
-    });
-    await tx.builderProfile.update({
-      where: { userId: upload.userId },
-      data: { reservedStorageBytes: { decrement: upload.reservedBytes } },
-    });
-    await tx.storageDeletionTask.upsert({
-      where: { storageKey: upload.storageKey },
-      create: {
-        storageKey: upload.storageKey,
-        resourceType: "UploadSession",
-        resourceId: upload.id,
-        scheduledFor: new Date(),
-      },
-      update: { status: "PENDING", scheduledFor: new Date(), lastError: null },
-    });
-  });
+  // A presigned PUT is not revoked by cancellation or deletion. Keep capacity charged until
+  // the cleanup worker has actually deleted every remaining object after the replay window.
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      await prisma.$transaction(async (tx) => {
+        const upload = await tx.releaseUploadSession.findUnique({ where: { id: sessionId } });
+        if (!upload || upload.reservationReleasedAt) return;
+        await scheduleUploadCleanup(tx, upload);
+      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+      return;
+    } catch (error) {
+      if (isTransactionConflict(error) && attempt === 0) continue;
+      throw error;
+    }
+  }
 }

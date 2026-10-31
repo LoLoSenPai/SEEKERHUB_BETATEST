@@ -20,16 +20,18 @@ export default async function InvitesPage({
   searchParams,
 }: {
   params: Promise<{ slug: string }>;
-  searchParams: Promise<{ created?: string; error?: string }>;
+  searchParams: Promise<{ created?: string; error?: string; releaseId?: string }>;
 }) {
   const { slug } = await params;
-  const { created, error } = await searchParams;
+  const { created, error, releaseId } = await searchParams;
   const session = await requireBuilderSession();
   const project = await getProjectForOwner(slug, session.user.id);
 
   if (!project) {
     notFound();
   }
+  const publishedReleases = project.releases.filter((release) => release.status === "PUBLISHED");
+  const selectedRelease = publishedReleases.find((release) => release.id === releaseId);
 
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
   const inviteLinks = project.inviteLinks.map((invite) => {
@@ -112,18 +114,19 @@ export default async function InvitesPage({
               </div>
               <div className="grid gap-2">
                 <FieldLabel htmlFor="releaseId" helpTitle="Release scope" help="Project-wide links can grant access to current and future eligible releases. Select one release for a single-build campaign.">Release scope</FieldLabel>
-                <Select id="releaseId" name="releaseId" defaultValue="">
-                  <option value="">Project-wide access</option>
-                  {project.releases.map((release) => (
+                <Select id="releaseId" name="releaseId" defaultValue={selectedRelease?.id ?? ""}>
+                  <option value="">Project-wide: current and future eligible releases</option>
+                  {publishedReleases.map((release) => (
                     <option key={release.id} value={release.id}>
                       {release.versionName} ({release.versionCode})
                     </option>
                   ))}
                 </Select>
+                <p className="text-xs text-muted-foreground">Project-wide access can include current and future eligible releases. Select a published release to limit this link to one build.</p>
               </div>
               <div className="grid gap-2">
                 <FieldLabel htmlFor="testerGroupId" helpTitle="Tester group" help="Optional. The tester receives a membership in this reusable cohort only after all release requirements are satisfied.">Tester group</FieldLabel>
-                <Select id="testerGroupId" name="testerGroupId" defaultValue="">
+                <Select id="testerGroupId" name="testerGroupId" defaultValue={selectedRelease?.accessPolicy?.testerGroupId ?? ""}>
                   <option value="">No tester group</option>
                   {project.testerGroups.map((group) => (
                     <option key={group.id} value={group.id}>

@@ -2,6 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { Prisma } from "@prisma/client";
+import { isPolicyAudienceBroadened } from "@/src/lib/access";
 import { prisma } from "@/src/lib/db";
 import { reconcilePendingInviteGrants } from "@/src/lib/invite-access";
 import { requireBuilderSession } from "@/src/lib/session";
@@ -11,18 +13,27 @@ function bool(formData: FormData, name: string) {
   return formData.get(name) === "on";
 }
 
-export async function updateReleasePolicyAction(formData: FormData) {
+export type ReleasePolicyFormState = { status: "idle" | "success" | "error"; message: string };
+class PolicyFormError extends Error {}
+
+export async function updateReleasePolicyAction(formData: FormData): Promise<void>;
+export async function updateReleasePolicyAction(state: ReleasePolicyFormState, formData: FormData): Promise<ReleasePolicyFormState>;
+export async function updateReleasePolicyAction(input: FormData | ReleasePolicyFormState, submitted?: FormData): Promise<void | ReleasePolicyFormState> {
+  const formData = submitted ?? (input as FormData);
+  try {
+    const message = await saveReleasePolicy(formData);
+    if (submitted) return { status: "success", message };
+  } catch (error) {
+    if (!submitted) throw error;
+    return { status: "error", message: error instanceof PolicyFormError ? error.message : "The access policy could not be saved. Refresh and try again." };
+  }
+}
+
+async function saveReleasePolicy(formData: FormData) {
   const session = await requireBuilderSession();
   const releaseId = String(formData.get("releaseId"));
-  const projectSlug = String(formData.get("projectSlug"));
-  const release = await prisma.release.findFirst({
-    where: { id: releaseId, deletedAt: null, project: { ownerId: session.user.id, deletedAt: null } },
-    include: { project: true },
-  });
-  if (!release) throw new Error("Release not found.");
-
   const accessPreset = String(formData.get("accessPreset") ?? "invite");
-  const policy = accessPolicyInputSchema.parse({
+  const parsed = accessPolicyInputSchema.safeParse({
     requireInviteAcceptance: bool(formData, "requireInviteAcceptance"),
     testerGroupId: String(formData.get("testerGroupId") ?? "").trim() || null,
     requireLinkedWallet: bool(formData, "requireLinkedWallet"),
@@ -31,18 +42,34 @@ export async function updateReleasePolicyAction(formData: FormData) {
     allowPreviousReleases: bool(formData, "allowPreviousReleases"),
     walletAllowlist: String(formData.get("walletAllowlist") ?? "").split(/\r?\n/).map((value) => value.trim()).filter(Boolean),
   });
+  if (!parsed.success) throw new PolicyFormError(parsed.error.issues[0]?.message ?? "Invalid access policy.");
+  const policy = parsed.data;
+  if (!policy.requireInviteAcceptance && policy.walletAllowlist.length === 0) {
+    throw new PolicyFormError("Require an invite link or add at least one allowed Solana wallet before saving.");
+  }
+  if (!["invite", "group", "wallet", "seeker", "custom"].includes(accessPreset)) throw new PolicyFormError("Choose a valid audience preset.");
   if (accessPreset === "wallet" && policy.walletAllowlist.length === 0) {
-    throw new Error("Add at least one Solana address for the wallet allowlist preset.");
+    throw new PolicyFormError("Add at least one Solana address for the wallet allowlist preset.");
   }
   if (accessPreset === "group" && !policy.testerGroupId) {
-    throw new Error("Select a tester group for the group-restricted preset.");
-  }
-  if (policy.testerGroupId) {
-    const group = await prisma.testerGroup.findFirst({ where: { id: policy.testerGroupId, projectId: release.projectId } });
-    if (!group) throw new Error("Tester group not found in this project.");
+    throw new PolicyFormError("Select a tester group for the group-restricted preset.");
   }
 
-  await prisma.$transaction(async (tx) => {
+  const release = await prisma.$transaction(async (tx) => {
+    const release = await tx.release.findFirst({
+      where: { id: releaseId, deletedAt: null, project: { ownerId: session.user.id, deletedAt: null } },
+      include: { project: true, accessPolicy: { include: { walletEntries: true } } },
+    });
+    if (!release) throw new PolicyFormError("Release not found.");
+    const previous = release.accessPolicy;
+    if (previous && isPolicyAudienceBroadened({ ...previous, walletAllowlist: previous.walletEntries.map(({ address }) => address) }, policy) &&
+      !bool(formData, "confirmAudienceBroadening")) {
+      throw new PolicyFormError("Confirm the audience broadening before saving this policy.");
+    }
+    if (policy.testerGroupId) {
+      const group = await tx.testerGroup.findFirst({ where: { id: policy.testerGroupId, projectId: release.projectId } });
+      if (!group) throw new PolicyFormError("Tester group not found in this project.");
+    }
     const accessPolicy = await tx.accessPolicy.upsert({
       where: { releaseId },
       create: {
@@ -72,15 +99,25 @@ export async function updateReleasePolicyAction(formData: FormData) {
     await tx.auditLog.create({
       data: { actorUserId: session.user.id, action: "release.policy_updated", targetType: "Release", targetId: releaseId },
     });
-  });
+    return release;
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 
-  const pendingUsers = await prisma.inviteClaim.findMany({
-    where: { grantedAt: null, revokedAt: null, inviteLink: { projectId: release.projectId } },
-    distinct: ["userId"],
-    select: { userId: true },
-  });
-  await Promise.all(pendingUsers.map(({ userId }) => reconcilePendingInviteGrants(userId, release.projectId)));
-  revalidatePath(`/builder/apps/${projectSlug}/releases/${releaseId}`);
+  let reconciliationPending = false;
+  try {
+    const pendingUsers = await prisma.inviteClaim.findMany({
+      where: { grantedAt: null, revokedAt: null, inviteLink: { projectId: release.projectId } },
+      distinct: ["userId"],
+      select: { userId: true },
+    });
+    for (const { userId } of pendingUsers) await reconcilePendingInviteGrants(userId, release.projectId);
+  } catch {
+    reconciliationPending = true;
+  }
+  revalidatePath(`/builder/apps/${release.project.slug}/releases/${releaseId}`);
+  revalidatePath("/tester");
+  return reconciliationPending
+    ? "Access policy saved. Some pending invitations could not be checked. Ask those testers to retry claiming their invitation explicitly."
+    : "Access policy saved.";
 }
 
 export async function setReleaseArchivedAction(formData: FormData) {
@@ -92,8 +129,15 @@ export async function setReleaseArchivedAction(formData: FormData) {
     where: { id: releaseId, deletedAt: null, project: { ownerId: session.user.id, deletedAt: null } },
   });
   if (!release) throw new Error("Release not found.");
+  if (release.status !== (archive ? "PUBLISHED" : "ARCHIVED")) {
+    throw new Error("Only published releases can be archived and only archived releases can be restored. Publish drafts through the publish endpoint.");
+  }
   await prisma.$transaction([
-    prisma.release.update({ where: { id: release.id }, data: { status: archive ? "ARCHIVED" : "PUBLISHED" } }),
+    prisma.release.update({
+      where: { id: release.id, status: archive ? "PUBLISHED" : "ARCHIVED", deletedAt: null,
+        project: { ownerId: session.user.id, deletedAt: null } },
+      data: { status: archive ? "ARCHIVED" : "PUBLISHED" },
+    }),
     prisma.auditLog.create({
       data: {
         actorUserId: session.user.id,

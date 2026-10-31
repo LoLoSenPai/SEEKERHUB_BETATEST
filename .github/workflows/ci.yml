@@ -58,10 +58,10 @@ jobs:
       - run: npm ci
       - name: Start private object storage
         run: |
-          docker run --detach --name seekerhub-minio --publish 9000:9000 \
+          docker run --detach --name seekerhub-minio --publish 127.0.0.1:9000:9000 \
             --env MINIO_ROOT_USER=ci-minio-access \
             --env MINIO_ROOT_PASSWORD=ci-minio-secret \
-            minio/minio:latest server /data
+            sourcemation/minio:RELEASE.2025-10-15T17-29-55Z@sha256:e1c92c5362c5e0d9a5cf5c6fd11e5c6f72fbcc7bdfd6fad94d0a3eb12784ba9a server /data
           for attempt in {1..30}; do
             curl --fail --silent http://127.0.0.1:9000/minio/health/live && exit 0
             sleep 2
@@ -75,5 +75,6 @@ jobs:
       - run: npm test
       - run: npm run test:integration
       - run: npm run build
+      - run: npm run test:artifact
       - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e

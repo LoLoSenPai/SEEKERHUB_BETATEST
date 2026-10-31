@@ -2,6 +2,19 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   allowedDevOrigins: ["127.0.0.1"],
+  outputFileTracingIncludes: {
+    "/api/uploads/releases/*/finalize": [
+      "./src/lib/apk-manifest-worker.cjs",
+      "./node_modules/@devicefarmer/adbkit-apkreader/**/*",
+      "./node_modules/yauzl/**/*",
+      "./node_modules/buffer-crc32/**/*",
+      "./node_modules/pend/**/*",
+      "./node_modules/debug/**/*",
+      "./node_modules/ms/**/*",
+      "./node_modules/supports-color/**/*",
+      "./node_modules/has-flag/**/*",
+    ],
+  },
   async headers() {
     return [
       {

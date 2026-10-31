@@ -92,7 +92,7 @@ export function evaluateReleaseAccess(input: EvaluateReleaseAccessInput): Access
 
   if (policy.testerGroupId) {
     const inGroup = testerMemberships.some(
-      (membership) => !membership.revokedAt && membership.testerGroupId === policy.testerGroupId,
+      (membership) => !membership.revokedAt && membership.projectId === projectId && membership.testerGroupId === policy.testerGroupId,
     );
     if (!inGroup) reasons.push({ code: "GROUP_REQUIRED", message: "This release is restricted to a tester group.", blocking: true });
   }
@@ -133,7 +133,10 @@ export function evaluateReleaseAccess(input: EvaluateReleaseAccessInput): Access
   }
 
   const hasBlockingReason = reasons.some((reason) => reason.blocking);
-  const canViewMetadata = !policy.requireInviteAcceptance || hasClaim;
+  // A claimed invitation exposes requirements, not a download entitlement.
+  const canViewMetadata = policy.requireInviteAcceptance ? hasClaim : !reasons.some(
+    (reason) => reason.code === "WALLET_NOT_ALLOWLISTED" || reason.code === "GROUP_REQUIRED",
+  );
 
   return {
     canViewMetadata,
@@ -141,4 +144,26 @@ export function evaluateReleaseAccess(input: EvaluateReleaseAccessInput): Access
     canSubmitFeedback: canViewMetadata && !hasBlockingReason,
     reasons,
   };
+}
+
+type AudiencePolicy = {
+  requireInviteAcceptance?: boolean;
+  testerGroupId?: string | null;
+  requireLinkedWallet?: boolean;
+  requireVerifiedSeeker?: boolean;
+  allowPreviousReleases?: boolean;
+  walletAllowlist?: string[];
+};
+
+export function isPolicyAudienceBroadened(before: AudiencePolicy, after: AudiencePolicy) {
+  const previousWallets = new Set(before.walletAllowlist ?? []);
+  const nextWallets = after.walletAllowlist ?? [];
+  return Boolean(
+    (before.requireInviteAcceptance && !after.requireInviteAcceptance) ||
+    (before.testerGroupId && before.testerGroupId !== after.testerGroupId) ||
+    (before.requireLinkedWallet && !after.requireLinkedWallet) ||
+    (before.requireVerifiedSeeker && !after.requireVerifiedSeeker) ||
+    (!before.allowPreviousReleases && after.allowPreviousReleases) ||
+    (previousWallets.size > 0 && (nextWallets.length === 0 || nextWallets.some((address) => !previousWallets.has(address)))),
+  );
 }

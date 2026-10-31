@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/src/lib/db";
 import { requireAdminSession } from "@/src/lib/session";
 import { deleteObject } from "@/src/lib/storage/s3";
+import { assertUploadDeletionAllowed, settleUploadReservation, uploadTaskTypes } from "@/src/lib/storage/cleanup-uploads";
 
 export async function setBuilderStatusAction(formData: FormData) {
   const admin = await requireAdminSession();
@@ -46,30 +47,40 @@ export async function purgeStorageTaskAction(formData: FormData) {
   const admin = await requireAdminSession();
   if (String(formData.get("confirmation")) !== "PURGE") throw new Error("Type PURGE to confirm permanent deletion.");
   const taskId = String(formData.get("taskId"));
-  const task = await prisma.$transaction(async (tx) => {
+  const { task, lease } = await prisma.$transaction(async (tx) => {
     const candidate = await tx.storageDeletionTask.findUnique({ where: { id: taskId } });
-    if (!candidate || !["PENDING", "FAILED"].includes(candidate.status)) {
+    if (!candidate || candidate.completedAt || !["PENDING", "FAILED"].includes(candidate.status)) {
       throw new Error("Deletion task is unavailable or already processing.");
     }
 
     if (candidate.resourceType === "Release") {
-      const release = await tx.release.findUnique({ where: { id: candidate.resourceId }, select: { deletedAt: true } });
+      const release = await tx.release.findUnique({ where: { id: candidate.resourceId }, include: { buildAsset: true } });
       if (!release?.deletedAt) throw new Error("Only trashed releases can be purged.");
+      if (release.buildAsset && release.buildAsset.storageKey !== candidate.storageKey) throw new Error("Release storage key mismatch.");
+    } else if (uploadTaskTypes.includes(candidate.resourceType)) {
+      await assertUploadDeletionAllowed(tx, candidate, new Date());
+    } else {
+      throw new Error("Unknown storage deletion resource type.");
     }
 
+    const claimedAt = new Date();
     const claimed = await tx.storageDeletionTask.updateMany({
-      where: { id: candidate.id, status: { in: ["PENDING", "FAILED"] } },
-      data: { status: "PROCESSING", attempts: { increment: 1 }, lastError: null },
+      where: { id: candidate.id, status: candidate.status, completedAt: null, attempts: candidate.attempts, updatedAt: candidate.updatedAt },
+      data: { status: "PROCESSING", attempts: { increment: 1 }, lastError: null, updatedAt: claimedAt },
     });
     if (!claimed.count) throw new Error("Deletion task is already processing.");
-    return candidate;
+    return {
+      task: candidate,
+      lease: { id: candidate.id, status: "PROCESSING" as const, completedAt: null, attempts: candidate.attempts + 1, updatedAt: claimedAt },
+    };
   });
 
   try {
+    if (uploadTaskTypes.includes(task.resourceType)) await assertUploadDeletionAllowed(prisma, task, new Date());
     await deleteObject(task.storageKey);
     await prisma.$transaction(async (tx) => {
       const completedTask = await tx.storageDeletionTask.updateMany({
-        where: { id: task.id, status: "PROCESSING", completedAt: null },
+        where: lease,
         data: { status: "COMPLETED", completedAt: new Date() },
       });
       if (!completedTask.count) throw new Error("Deletion task state changed unexpectedly.");
@@ -79,14 +90,14 @@ export async function purgeStorageTaskAction(formData: FormData) {
         if (!release?.deletedAt) throw new Error("Only trashed releases can be purged.");
         if (release.buildAsset) await tx.builderProfile.update({ where: { userId: release.project.ownerId }, data: { usedStorageBytes: { decrement: release.buildAsset.fileSizeBytes } } });
         await tx.release.delete({ where: { id: release.id } });
-      } else if (task.resourceType === "UploadSession") {
-        await tx.releaseUploadSession.deleteMany({ where: { id: task.resourceId, completedAt: null } });
+      } else if (uploadTaskTypes.includes(task.resourceType)) {
+        await settleUploadReservation(tx, task.resourceId);
       }
       await tx.auditLog.create({ data: { actorUserId: admin.user.id, action: "storage.purged_immediately", targetType: task.resourceType, targetId: task.resourceId, metadataJson: { storageKey: task.storageKey } } });
     });
   } catch (error) {
     await prisma.storageDeletionTask.updateMany({
-      where: { id: task.id, status: "PROCESSING", completedAt: null },
+      where: lease,
       data: {
         status: "FAILED",
         lastError: error instanceof Error ? error.message.slice(0, 1_000) : "Unknown storage deletion error",

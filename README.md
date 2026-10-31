@@ -13,6 +13,8 @@ SeekerHub is a web-first private Android beta distribution service for Solana Mo
 
 Node.js 24 is required. The repository and Vercel project must use the same major version.
 
+See [the beta readiness checkpoint](docs/beta-readiness.md) for the implemented journey changes, local validation and remaining production launch checks.
+
 ## Local Setup
 
 1. Install dependencies and create the local environment file.
@@ -83,12 +85,16 @@ Keep the bucket private. The R2 token needs Object Read & Write only for the sel
 
 Upload flow:
 
-1. The server atomically reserves the builder quota.
+1. The server atomically reserves the builder quota, including temporary room for the uploaded and inspected copies (twice the APK size).
 2. The browser receives a 15-minute signed R2 `PUT` URL bound to content type and size.
 3. Finalization verifies R2 `Content-Length`, then streams the object into Vercel temporary storage; it is never buffered entirely in memory.
-4. SeekerHub verifies ZIP/APK structure, parses the binary manifest, detects APK signature markers, and computes SHA-256 while streaming.
+4. SeekerHub verifies ZIP/APK structure, parses the bounded binary manifest in a memory/time-limited worker, detects APK signature markers, and computes SHA-256 while streaming.
 5. Manifest package/version fields are authoritative and the project is permanently bound to the first package name.
-6. Downloads are authorized on every request and redirect to a private 60-second signed attachment URL.
+6. The exact inspected local snapshot is saved to a separate server-only object key. The browser PUT URL can never replace this final APK. Its staging copy remains charged until delayed cleanup, including the presigned URL replay window.
+7. Finalization saves a **draft**, not a public release. The builder continues with release notes, audience, then a review screen. Publishing atomically saves the policy and creates an invite when required. Retrying publication does not create duplicate links.
+8. Downloads are authorized on every request and redirect to a private 60-second signed attachment URL.
+
+Draft APKs survive navigation; unsubmitted notes/audience edits do not. Resume a draft from the app's release list. Invite links default to that release and its required group; app-wide access is an explicit choice. An app-wide link can unlock future eligible releases, whereas "older versions" applies only to earlier builds whose own requirements are also met.
 
 The signature-marker check is not a replacement for Android `apksigner verify`. Full cryptographic verification needs a dedicated Android/Java validation service.
 
@@ -102,11 +108,11 @@ For a new database:
 npm run db:migrate:deploy
 ```
 
-The current production database predates Prisma migrations. Before its first migration deployment:
+For a legacy database that predates Prisma migrations, and only if the baseline is not already recorded:
 
 1. Create a Neon backup branch.
 2. Point the CLI at that branch and test the sequence there.
-3. Mark the generated historical schema as already applied.
+3. Confirm the existing schema matches the baseline, then mark that baseline as already applied.
 4. Deploy the additive hardening migration.
 
 ```bash
@@ -121,7 +127,7 @@ Only run those two commands against production after explicit approval and after
 - `User` is the common identity for builders and testers.
 - `BuilderProfile` grants builder capability, status, quotas, and optional admin access.
 - Invite visitors start as guests. Magic-link or wallet recovery transfers claims, memberships, feedback, events, profiles, and wallets transactionally to the recovered account.
-- Link expiration/revocation blocks new claims. `TesterAccess` keeps project-level revocation effective across every future invite link; reactivation allows a new claim but never restores an old seat automatically.
+- Link expiration/revocation blocks new claims **and new seat grants** to pending claims. Already granted places are not invalidated by closing a link. `TesterAccess` keeps project-level revocation effective across every future invite link; reactivation allows a new claim but never restores an old seat automatically.
 - Metadata visibility, APK download, and feedback permission are evaluated separately with typed reason codes.
 - Device/browser detection is advisory only. It can never provide Seeker access.
 - A Seeker gate requires a fresh wallet signature and a server-side positive-balance Token-2022 SGT check. Verification expires after 24 hours.
@@ -133,7 +139,7 @@ Default public-beta quotas are one project, five retained releases, 250 MiB per 
 - `/admin`: builders, suspension, quotas, storage deletion queue, immediate confirmed purge, and audit log.
 - `/api/health`: database, R2, email, cron, and invite-key readiness.
 - `/api/cron/cleanup`: releases expired reservations, removes R2 objects, purges database records, and prunes transient records.
-- `vercel.json`: daily cleanup schedule.
+- `vercel.json`: cleanup every ten minutes (Vercel Pro), with bounded batches, retries, and backlog logs. See `SECURITY.md` for operational limits.
 - `/privacy`, `/terms`: beta legal drafts that must be reviewed before promotion. `/abuse` publishes the monitored `EMAIL_REPLY_TO` contact.
 
 ## Verification
@@ -145,9 +151,12 @@ npm test
 npm run test:integration
 npm run test:e2e
 npm run build
+npm run test:artifact
 ```
 
-Integration tests require a disposable PostgreSQL database whose name contains `test`, local S3-compatible storage, and `RUN_INTEGRATION_TESTS=true`. The GitHub Actions workflow provisions PostgreSQL 16 and MinIO, applies every migration from a blank database, and runs the complete suite automatically. It never uses the production Neon or R2 connections.
+Integration tests require a disposable PostgreSQL database whose name contains `test`, local S3-compatible storage, and `RUN_INTEGRATION_TESTS=true`. The GitHub Actions workflow provisions PostgreSQL 16 and MinIO, applies every migration from a blank database, and runs the complete suite against the production build. It never uses the production Neon or R2 connections. The artifact check copies only the finalize route's traced files into a temporary directory and executes its APK workers without access to the checkout's dependencies.
+
+For isolated local review, `scripts/with-review-env.mjs` replaces service credentials before running a Node entrypoint. It expects a disposable PostgreSQL database `seekerhub_review_test` on port 55432 and MinIO on 59000; its credentials are test-only. The app/E2E base URL is `http://127.0.0.1:3100`. Never point the suite at production. Example: `node scripts/with-review-env.mjs node_modules/vitest/vitest.mjs run --config vitest.integration.config.mts`. Authenticated browser tests seed verified test accounts locally; they do not establish real email deliverability or physical Android/MWA compatibility.
 
 The remaining native `bigint` binding warning comes from a Solana transitive dependency; the package falls back to its JavaScript implementation. Production audit exceptions and mitigations are tracked in `SECURITY.md`. Review them before each public deployment rather than accepting breaking downgrades proposed by `npm audit fix --force`.
 

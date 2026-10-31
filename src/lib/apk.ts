@@ -1,9 +1,10 @@
 import { createHash } from "node:crypto";
 import { createReadStream, statSync } from "node:fs";
-import { basename, extname } from "node:path";
-import ApkReader from "@devicefarmer/adbkit-apkreader";
-import { fileTypeFromBuffer, fileTypeFromFile } from "file-type";
-import yauzl from "yauzl";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { basename, extname, join } from "node:path";
+import { fileTypeFromFile } from "file-type";
+import { readApkManifest } from "./apk-worker";
 
 const APK_SIGNATURE_MAGIC = Buffer.from("APK Sig Block 42", "ascii");
 
@@ -40,48 +41,6 @@ export async function calculateFileSha256(filePath: string) {
   return (await hashAndDetectSignature(filePath)).sha256Checksum;
 }
 
-function invalidApkError() {
-  return new Error(
-    "Uploaded file is not a valid APK archive. Upload a single .apk file, not an .aab, .apks, .xapk, or renamed file.",
-  );
-}
-
-async function inspectZipEntries(filePath: string) {
-  return new Promise<{ hasAndroidManifest: boolean; hasV1SignatureFiles: boolean }>((resolve, reject) => {
-    yauzl.open(filePath, { lazyEntries: true }, (error, zipfile) => {
-      if (error || !zipfile) return reject(invalidApkError());
-      let hasAndroidManifest = false;
-      let hasV1SignatureFiles = false;
-      zipfile.readEntry();
-      zipfile.on("entry", (entry) => {
-        if (entry.fileName === "AndroidManifest.xml") hasAndroidManifest = true;
-        if (/^META-INF\/[^/]+\.(RSA|DSA|EC)$/i.test(entry.fileName)) hasV1SignatureFiles = true;
-        zipfile.readEntry();
-      });
-      zipfile.on("end", () => resolve({ hasAndroidManifest, hasV1SignatureFiles }));
-      zipfile.on("error", () => reject(invalidApkError()));
-    });
-  });
-}
-
-async function inspectZipEntriesFromBuffer(fileBuffer: Buffer) {
-  return new Promise<{ hasAndroidManifest: boolean; hasV1SignatureFiles: boolean }>((resolve, reject) => {
-    yauzl.fromBuffer(fileBuffer, { lazyEntries: true }, (error, zipfile) => {
-      if (error || !zipfile) return reject(invalidApkError());
-      let hasAndroidManifest = false;
-      let hasV1SignatureFiles = false;
-      zipfile.readEntry();
-      zipfile.on("entry", (entry) => {
-        if (entry.fileName === "AndroidManifest.xml") hasAndroidManifest = true;
-        if (/^META-INF\/[^/]+\.(RSA|DSA|EC)$/i.test(entry.fileName)) hasV1SignatureFiles = true;
-        zipfile.readEntry();
-      });
-      zipfile.on("end", () => resolve({ hasAndroidManifest, hasV1SignatureFiles }));
-      zipfile.on("error", () => reject(invalidApkError()));
-    });
-  });
-}
-
 function integerOrNull(value: string | number | undefined) {
   if (value === undefined) return null;
   const parsed = Number(value);
@@ -89,22 +48,20 @@ function integerOrNull(value: string | number | undefined) {
 }
 
 export async function inspectApkFile(filePath: string) {
-  const [detectedType, zip, hashResult, reader] = await Promise.all([
+  const zip = await readApkManifest(filePath);
+  const checks = await Promise.allSettled([
     fileTypeFromFile(filePath),
-    inspectZipEntries(filePath),
     hashAndDetectSignature(filePath),
-    ApkReader.open(filePath),
   ]);
-  if (!zip.hasAndroidManifest) throw new Error("The archive does not contain AndroidManifest.xml.");
+  // Do not return early on one failure while another task still owns the local snapshot.
+  const [typeCheck, hashCheck] = checks;
+  if (typeCheck.status === "rejected") throw typeCheck.reason;
+  if (hashCheck.status === "rejected") throw hashCheck.reason;
+  const detectedType = typeCheck.value;
+  const hashResult = hashCheck.value;
+  const manifest = zip.manifest;
 
-  let manifest;
-  try {
-    manifest = await reader.readManifest();
-  } catch {
-    throw new Error("AndroidManifest.xml could not be parsed from this APK.");
-  }
-
-  const packageName = manifest.package?.trim();
+  const packageName = typeof manifest.package === "string" ? manifest.package.trim() : "";
   const versionName = String(manifest.versionName ?? "").trim();
   const versionCode = integerOrNull(manifest.versionCode);
   if (!packageName || !versionName || !versionCode || versionCode <= 0) {
@@ -130,13 +87,12 @@ export async function inspectApkFile(filePath: string) {
 }
 
 export async function inspectApkBuffer(fileBuffer: Buffer) {
-  const detectedType = await fileTypeFromBuffer(fileBuffer);
-  const zip = await inspectZipEntriesFromBuffer(fileBuffer);
-  if (!zip.hasAndroidManifest) throw new Error("Uploaded archive is not a valid Android APK.");
-  return {
-    detectedMimeType: detectedType?.mime ?? "application/vnd.android.package-archive",
-    fileSizeBytes: BigInt(fileBuffer.byteLength),
-    sha256Checksum: createHash("sha256").update(fileBuffer).digest("hex"),
-    hasApkSignature: zip.hasV1SignatureFiles || fileBuffer.includes(APK_SIGNATURE_MAGIC),
-  };
+  const directory = await mkdtemp(join(tmpdir(), "seekerhub-apk-buffer-"));
+  try {
+    const filePath = join(directory, "release.apk");
+    await writeFile(filePath, fileBuffer, { flag: "wx", mode: 0o600 });
+    return await inspectApkFile(filePath);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
 }

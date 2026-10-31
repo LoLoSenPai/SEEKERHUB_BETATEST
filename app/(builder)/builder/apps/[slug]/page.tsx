@@ -40,13 +40,75 @@ export default async function BuilderProjectPage({
     >
       <BuilderJourney
         projectSlug={project.slug}
-        current={project.releases.length ? (project.inviteLinks.length ? "review" : "invite") : "release"}
+        current="release"
         releaseCount={project.releases.length}
         inviteCount={project.inviteLinks.length}
         downloadCount={project.releases.reduce((total, release) => total + release.downloadEvents.length, 0)}
       />
-      <div className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
-        <div className="order-2 grid gap-6 xl:order-1">
+      <div className="flex flex-col gap-6">
+        <Card className="rounded-[1.75rem]">
+          <CardHeader className="flex items-start justify-between gap-4 sm:flex-row">
+            <div>
+              <CardTitle>Project operations</CardTitle>
+              <CardDescription>Jump into the release upload flow or manage tester routing.</CardDescription>
+            </div>
+            <Link href={`/builder/apps/${project.slug}/releases/new`} className={buttonVariants()}>
+              Upload release
+            </Link>
+          </CardHeader>
+          <CardContent className="grid gap-4 sm:grid-cols-2">
+            {project.androidPackageName ? <div className="sm:col-span-2 rounded-[1.2rem] border border-border bg-muted/50 p-4 text-sm"><span className="font-semibold">Bound Android package:</span> <span className="break-all font-mono">{project.androidPackageName}</span></div> : null}
+            <Link href={`/builder/apps/${project.slug}/groups`} className="rounded-[1.4rem] border border-border bg-card p-5 transition hover:bg-muted/60">
+              <div className="font-semibold">Tester groups</div>
+              <div className="mt-2 text-sm text-muted-foreground">{project.testerGroups.length} groups configured</div>
+            </Link>
+            <Link href={`/builder/apps/${project.slug}/invites`} className="rounded-[1.4rem] border border-border bg-card p-5 transition hover:bg-muted/60">
+              <div className="font-semibold">Invite links</div>
+              <div className="mt-2 text-sm text-muted-foreground">{project.inviteLinks.length} shareable private links</div>
+            </Link>
+            <div className="sm:col-span-2 text-sm text-muted-foreground">{project.releases.reduce((total, release) => total + release.feedbackReports.length, 0)} feedback reports across releases</div>
+          </CardContent>
+        </Card>
+      <Card id="releases" className="rounded-[1.75rem]">
+        <CardHeader>
+          <CardTitle>Releases</CardTitle>
+          <CardDescription>Latest APK builds, access policies, and the release analytics that matter in the beta loop.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {project.releases.length ? (
+            [...project.releases].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime()).map((release) => (
+              <Link
+                key={release.id}
+                href={`/builder/apps/${project.slug}/releases/${release.id}`}
+                className="block rounded-[1.4rem] border border-border bg-card p-5 transition hover:bg-muted/60 hover:shadow-md"
+              >
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                  <div className="min-w-0 space-y-2">
+                    <div className="flex flex-wrap items-center gap-3">
+                      <h3 className="min-w-0 max-w-full break-words text-lg font-semibold">
+                        {release.versionName} ({release.versionCode})
+                      </h3>
+                      <Badge variant="brand">{release.status}</Badge>
+                    </div>
+                    <p className="break-words text-sm leading-7 text-muted-foreground line-clamp-2">{release.changelog}</p>
+                  </div>
+                  <div className="grid gap-2 text-sm text-muted-foreground lg:text-right">
+                    {release.status === "DRAFT" ? <div className="font-semibold text-foreground">Resume draft</div> : <><div>{release.downloadEvents.length} download links</div><div>{release.feedbackReports.length} feedback reports</div></>}
+                    <div>{release.buildAsset ? formatBytes(release.buildAsset.fileSizeBytes) : "No asset"}</div>
+                  </div>
+                </div>
+              </Link>
+            ))
+          ) : (
+            <div className="rounded-[1.4rem] border border-dashed border-border bg-card px-6 py-10 text-center text-muted-foreground">
+              No releases yet. Upload the first APK to start the private beta workflow.
+            </div>
+          )}
+        </CardContent>
+      </Card>
+        <section id="settings" className="scroll-mt-4 rounded-[1.75rem] border border-border bg-card p-4">
+          <h2 className="font-semibold">Project settings and danger zone</h2>
+          <div className="mt-4 grid gap-6 xl:grid-cols-2">
           <Card className="rounded-[1.75rem]">
             <CardHeader>
               <CardTitle>Project settings</CardTitle>
@@ -79,7 +141,7 @@ export default async function BuilderProjectPage({
               <form action={deleteProjectAction} className="grid gap-5">
                 <input type="hidden" name="projectId" value={project.id} />
                 <div className="rounded-[1.25rem] border border-danger/20 bg-danger/5 px-4 py-3 text-sm text-muted-foreground">
-                  Type <span className="font-semibold text-foreground">{project.name}</span> to confirm. Storage still counts against quota until purge.
+                  Type <span className="break-all font-semibold text-foreground">{project.name}</span> to confirm. Storage still counts against quota until purge.
                 </div>
                 {resolvedSearchParams?.deleteError === "confirmation" ? (
                   <div className="rounded-[1.25rem] border border-danger/20 bg-danger/5 px-4 py-3 text-sm text-danger">
@@ -98,70 +160,10 @@ export default async function BuilderProjectPage({
               </form>
             </CardContent>
           </Card>
-        </div>
+          </div>
+        </section>
 
-        <Card className="order-1 rounded-[1.75rem] xl:order-2">
-          <CardHeader className="flex items-start justify-between gap-4 sm:flex-row">
-            <div>
-              <CardTitle>Project operations</CardTitle>
-              <CardDescription>Jump into the release upload flow or manage tester routing.</CardDescription>
-            </div>
-            <Link href={`/builder/apps/${project.slug}/releases/new`} className={buttonVariants()}>
-              Upload release
-            </Link>
-          </CardHeader>
-          <CardContent className="grid gap-4 sm:grid-cols-2">
-            {project.androidPackageName ? <div className="sm:col-span-2 rounded-[1.2rem] border border-border bg-muted/50 p-4 text-sm"><span className="font-semibold">Bound Android package:</span> <span className="font-mono">{project.androidPackageName}</span></div> : null}
-            <Link href={`/builder/apps/${project.slug}/groups`} className="rounded-[1.4rem] border border-border bg-card p-5 transition hover:bg-muted/60">
-              <div className="font-semibold">Tester groups</div>
-              <div className="mt-2 text-sm text-muted-foreground">{project.testerGroups.length} groups configured</div>
-            </Link>
-            <Link href={`/builder/apps/${project.slug}/invites`} className="rounded-[1.4rem] border border-border bg-card p-5 transition hover:bg-muted/60">
-              <div className="font-semibold">Invite links</div>
-              <div className="mt-2 text-sm text-muted-foreground">{project.inviteLinks.length} shareable private links</div>
-            </Link>
-          </CardContent>
-        </Card>
       </div>
-
-      <Card className="mt-6 rounded-[1.75rem]">
-        <CardHeader>
-          <CardTitle>Releases</CardTitle>
-          <CardDescription>Latest APK builds, access policies, and the release analytics that matter in the beta loop.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {project.releases.length ? (
-            project.releases.map((release) => (
-              <Link
-                key={release.id}
-                href={`/builder/apps/${project.slug}/releases/${release.id}`}
-                className="block rounded-[1.4rem] border border-border bg-card p-5 transition hover:bg-muted/60 hover:shadow-md"
-              >
-                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-3">
-                      <h3 className="text-lg font-semibold">
-                        {release.versionName} ({release.versionCode})
-                      </h3>
-                      <Badge variant="brand">{release.status}</Badge>
-                    </div>
-                    <p className="text-sm leading-7 text-muted-foreground line-clamp-2">{release.changelog}</p>
-                  </div>
-                  <div className="grid gap-2 text-sm text-muted-foreground lg:text-right">
-                    <div>{release.downloadEvents.length} downloads</div>
-                    <div>{release.feedbackReports.length} feedback reports</div>
-                    <div>{release.buildAsset ? formatBytes(release.buildAsset.fileSizeBytes) : "No asset"}</div>
-                  </div>
-                </div>
-              </Link>
-            ))
-          ) : (
-            <div className="rounded-[1.4rem] border border-dashed border-border bg-card px-6 py-10 text-center text-muted-foreground">
-              No releases yet. Upload the first APK to start the private beta workflow.
-            </div>
-          )}
-        </CardContent>
-      </Card>
     </DashboardFrame>
   );
 }

@@ -109,13 +109,15 @@ describe("evaluateReleaseAccess", () => {
     expect(result.reasons[0].code).toBe("INVITE_PENDING_ELIGIBILITY");
   });
 
-  it("blocks a wallet that is not allowlisted", () => {
+  it("hides metadata and blocks access for a non-allowlisted wallet on a no-invite release", () => {
     const result = evaluate({
       policy: { ...basePolicy, requireLinkedWallet: true, walletEntries: [{ address: "allowed-wallet" }] },
       wallets: [{ address: "other-wallet" } as never],
     });
-    expect(result.canViewMetadata).toBe(true);
+    // No-invite allowlists restrict discovery, not only the APK download.
+    expect(result.canViewMetadata).toBe(false);
     expect(result.canDownload).toBe(false);
+    expect(result.canSubmitFeedback).toBe(false);
     expect(result.reasons.some((reason) => reason.code === "WALLET_NOT_ALLOWLISTED")).toBe(true);
   });
 

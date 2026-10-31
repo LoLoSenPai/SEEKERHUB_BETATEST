@@ -12,7 +12,10 @@ export function proxy(request: NextRequest) {
     return NextResponse.redirect(signInUrl);
   }
 
-  return NextResponse.next();
+  const requestHeaders = new Headers(request.headers);
+  // Always overwrite the client value: this is only a safe navigation hint.
+  requestHeaders.set("x-seekerhub-return-to", `${request.nextUrl.pathname}${request.nextUrl.search}`);
+  return NextResponse.next({ request: { headers: requestHeaders } });
 }
 
 export const config = {

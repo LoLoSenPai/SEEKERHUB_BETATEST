@@ -1,4 +1,4 @@
-import { notFound } from "next/navigation";
+import Link from "next/link";
 import { InviteClaimCard } from "@/src/features/invites/invite-claim-card";
 import { getInvitePreview } from "@/src/features/projects/queries";
 
@@ -7,7 +7,7 @@ export default async function InvitePage({ params }: { params: Promise<{ token: 
   const invite = await getInvitePreview(token);
 
   if (!invite) {
-    notFound();
+    return <main className="page-shell min-h-screen justify-center"><div className="mx-auto w-full max-w-lg rounded-[2rem] border border-border bg-surface p-6"><h1 className="text-2xl font-semibold">This invitation is unavailable</h1><p className="mt-3 text-sm leading-6 text-muted-foreground">The link may be invalid, expired or revoked. Ask the builder for a new invitation. If you already have access, try signing in to recover it.</p><Link href="/sign-in?intent=tester&returnTo=%2Ftester" className="mt-5 inline-block font-semibold hover:underline">Recover tester access</Link></div></main>;
   }
 
   return (
@@ -21,12 +21,11 @@ export default async function InvitePage({ params }: { params: Promise<{ token: 
           <p className="max-w-xl text-lg leading-8 text-muted-foreground">You were invited to test a private Android build. Claim access, download the APK, and send feedback to the builder.</p>
           <div className="grid gap-2 text-sm text-muted-foreground">
             <div>Release scope: {invite.release?.versionName ?? "Project-wide"}</div>
-            <div>Tester group: {invite.testerGroup?.name ?? "No tester group"}</div>
             <div>Expires: {invite.expiresAt ? invite.expiresAt.toLocaleString() : "Never"}</div>
           </div>
         </div>
         <div className="order-1 lg:order-2">
-          <InviteClaimCard token={token} label={invite.label} projectName={invite.project.name} releaseVersion={invite.release?.versionName ?? null} />
+          <InviteClaimCard token={token} projectName={invite.project.name} releaseVersion={invite.release?.versionName ?? null} />
         </div>
       </div>
     </main>

@@ -6,7 +6,6 @@ import { Badge } from "@/src/components/ui/badge";
 import { buttonVariants } from "@/src/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/src/components/ui/card";
 import { FeedbackForm } from "@/src/features/feedback/feedback-form";
-import { SeekerStatusCard } from "@/src/features/seeker/seeker-status-card";
 import { WalletLinkCard } from "@/src/features/wallet/wallet-link-card";
 import { getAccessibleReleasesForUser, getTesterRelease } from "@/src/features/projects/queries";
 import { prisma } from "@/src/lib/db";
@@ -33,9 +32,8 @@ export default async function TesterReleaseDetailPage({
         (candidate) => candidate.projectId === release.projectId && candidate.publishedAt < release.publishedAt,
       )
     : [];
-  const verifiedSeeker = user.wallets.some(
-    (wallet) => wallet.seekerGenesisVerificationExpiresAt && wallet.seekerGenesisVerificationExpiresAt > new Date(),
-  );
+  const walletBlock = decision.reasons.some((reason) => reason.blocking && ["WALLET_REQUIRED", "WALLET_NOT_ALLOWLISTED", "SGT_VERIFICATION_REQUIRED", "SGT_VERIFICATION_EXPIRED"].includes(reason.code));
+  const seekerBlock = decision.reasons.some((reason) => reason.blocking && ["SGT_VERIFICATION_REQUIRED", "SGT_VERIFICATION_EXPIRED"].includes(reason.code));
 
   if (decision.canViewMetadata) {
     const recentView = await prisma.releaseViewEvent.findFirst({
@@ -75,13 +73,12 @@ export default async function TesterReleaseDetailPage({
               </CardDescription>
             </CardHeader>
             <CardContent className="min-w-0 space-y-5">
-              <div className="whitespace-pre-wrap break-words rounded-[1.3rem] bg-muted/70 p-4 text-sm leading-7 text-muted-foreground">{release.changelog}</div>
               {decision.canDownload ? (
                 <>
-                  <Link href={`/api/downloads/${release.id}`} className={cn(buttonVariants({ size: "lg" }), "w-full justify-center sm:w-auto")}>
+                  <a href={`/api/downloads/${release.id}`} className={cn(buttonVariants({ size: "lg" }), "w-full justify-center sm:w-auto")}>
                     <Download className="size-4" aria-hidden="true" />
                     Download APK
-                  </Link>
+                  </a>
                   <p className="text-xs leading-5 text-muted-foreground">Android may ask you to allow installs from this browser before opening the APK.</p>
                 </>
               ) : (
@@ -92,6 +89,7 @@ export default async function TesterReleaseDetailPage({
                   </div>
                 </div>
               )}
+              <details className="rounded-[1.3rem] bg-muted/70 p-4 text-sm"><summary className="cursor-pointer font-semibold">Release notes</summary><div className="mt-3 whitespace-pre-wrap break-words leading-7 text-muted-foreground">{release.changelog}</div></details>
             </CardContent>
           </Card>
 
@@ -132,19 +130,13 @@ export default async function TesterReleaseDetailPage({
         </div>
 
         <div className="min-w-0 space-y-6">
-          <div className="px-1">
-            <div className="section-eyebrow">Optional setup</div>
-            <h2 className="mt-2 text-xl font-semibold text-foreground">Account and device</h2>
-            <p className="mt-1 text-sm leading-6 text-muted-foreground">Only needed when this beta requires recovery, a wallet, or verified Seeker access.</p>
-          </div>
+          {walletBlock ? <><div className="px-1"><div className="section-eyebrow">Required to download</div><h2 className="mt-2 text-xl font-semibold">Complete wallet access</h2></div><WalletLinkCard linkedWallets={user.wallets} requiredSeeker={seekerBlock} showSeeker={seekerBlock} /></> : null}
           {session.user.isAnonymous ? (
             <Card className="rounded-[1.75rem] border-brand/25 bg-brand/5">
               <CardHeader><CardTitle>Keep this access</CardTitle><CardDescription>Add an email to recover this beta and your feedback on another device.</CardDescription></CardHeader>
-              <CardContent><Link href="/tester/upgrade" className={cn(buttonVariants(), "w-full justify-center sm:w-auto")}>Add recovery email</Link></CardContent>
+              <CardContent><Link href={`/tester/upgrade?returnTo=${encodeURIComponent(`/tester/releases/${release.id}`)}`} className={cn(buttonVariants(), "w-full justify-center sm:w-auto")}>Add recovery email</Link></CardContent>
             </Card>
           ) : null}
-          <WalletLinkCard linkedWallets={user.wallets} />
-          <SeekerStatusCard verifiedSeeker={verifiedSeeker} />
         </div>
       </div>
     </DashboardFrame>

@@ -30,9 +30,7 @@ export default async function SignInPage({
         <div className="grid items-center gap-10 lg:grid-cols-[0.9fr_1.1fr]">
           <div className="order-2 space-y-5 lg:order-1">
             <div className="section-eyebrow">{intent === "builder" ? "Builder access" : "Tester access"}</div>
-            <h1 className="text-4xl font-semibold tracking-tight text-foreground sm:text-5xl">
-              {intent === "builder" ? "Manage releases and private beta access." : "Recover every build shared with you."}
-            </h1>
+            {intent === "builder" ? <h1 className="text-4xl font-semibold tracking-tight text-foreground sm:text-5xl">Manage releases and private beta access.</h1> : <h2 className="text-4xl font-semibold tracking-tight text-foreground sm:text-5xl">Recover every build shared with you.</h2>}
             <p className="max-w-xl text-lg leading-8 text-muted-foreground">
               {intent === "builder"
                 ? "Builders use a verified email and password. Wallets remain optional unless a release policy needs one."
@@ -40,6 +38,7 @@ export default async function SignInPage({
             </p>
           </div>
           <div className="order-1 lg:order-2">
+            {intent === "tester" ? <div className="mb-4 rounded-2xl border border-border bg-surface p-5 text-sm leading-6"><h1 className="text-xl font-semibold">Testing starts with an invitation</h1><p className="mt-2 text-muted-foreground">There is no public app catalogue. Open the private link sent by the builder to begin. Already have access? Sign in below to recover it.</p><p className="mt-2 text-muted-foreground">One account can be used for both testing and building.</p></div> : null}
             <EmailAuthForm mode="sign-in" intent={intent} returnTo={returnTo} />
             {intent === "tester" ? <WalletProviders><WalletSignIn returnTo={returnTo} /></WalletProviders> : null}
           </div>

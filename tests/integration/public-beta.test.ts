@@ -161,7 +161,7 @@ integrationDescribe("public beta database invariants", () => {
       reserveUploadQuota({
         userId: builderId,
         projectId,
-        bytes: 600,
+        bytes: 300,
         storageKey: `integration/${runId}/${suffix}.apk`,
         fileName: `${suffix}.apk`,
         contentType: "application/vnd.android.package-archive",

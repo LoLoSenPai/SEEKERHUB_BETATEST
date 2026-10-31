@@ -63,14 +63,17 @@ export async function createInviteLinkAction(formData: FormData) {
 
   const [release, testerGroup] = await Promise.all([
     parsed.data.releaseId
-      ? prisma.release.findFirst({ where: { id: parsed.data.releaseId, projectId: parsed.data.projectId, deletedAt: null } })
+      ? prisma.release.findFirst({ where: { id: parsed.data.releaseId, projectId: parsed.data.projectId, deletedAt: null, status: "PUBLISHED" }, include: { accessPolicy: true } })
       : null,
     parsed.data.testerGroupId
       ? prisma.testerGroup.findFirst({ where: { id: parsed.data.testerGroupId, projectId: parsed.data.projectId } })
       : null,
   ]);
-  if (parsed.data.releaseId && !release) throw new Error("The selected release does not belong to this project.");
+  if (parsed.data.releaseId && !release) redirect(buildInvitesPath(projectSlug, { error: "Select a published release from this project." }));
   if (parsed.data.testerGroupId && !testerGroup) throw new Error("The selected tester group does not belong to this project.");
+  if (release?.accessPolicy?.testerGroupId && release.accessPolicy.testerGroupId !== parsed.data.testerGroupId) {
+    redirect(buildInvitesPath(projectSlug, { releaseId: release.id, error: "Select the tester group required by this release." }));
+  }
 
   const token = createInviteToken();
 

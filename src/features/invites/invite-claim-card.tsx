@@ -10,12 +10,10 @@ import { useDeviceContext } from "@/src/features/seeker/use-device-context";
 
 export function InviteClaimCard({
   token,
-  label,
   projectName,
   releaseVersion,
 }: {
   token: string;
-  label: string;
   projectName: string;
   releaseVersion?: string | null;
 }) {
@@ -29,7 +27,7 @@ export function InviteClaimCard({
         <div className="section-eyebrow">Private Android beta</div>
         <CardTitle className="break-words text-2xl">{projectName}</CardTitle>
         <CardDescription>
-          {releaseVersion ? `Version ${releaseVersion}. ` : ""}Invite: {label}. No account is required to start; SeekerHub creates a recoverable guest session.
+          {releaseVersion ? `Version ${releaseVersion}. ` : ""}No account is required to start. You can add recovery details after opening the beta.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -58,9 +56,7 @@ export function InviteClaimCard({
                 throw new Error(payload.error ?? "Unable to claim invite.");
               }
 
-              toast.success("Invite claimed.");
               router.push(payload.redirectTo ?? "/tester");
-              router.refresh();
             } catch (error) {
               toast.error(error instanceof Error ? error.message : "Invite claim failed.");
             } finally {

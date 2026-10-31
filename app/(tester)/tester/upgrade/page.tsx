@@ -2,10 +2,12 @@ import { redirect } from "next/navigation";
 import { DashboardFrame } from "@/src/components/layout/dashboard-frame";
 import { EmailAuthForm } from "@/src/components/auth/email-auth-form";
 import { requireTesterSession } from "@/src/lib/session";
+import { safeReturnTo } from "@/src/lib/redirect";
 
-export default async function UpgradeTesterAccountPage() {
+export default async function UpgradeTesterAccountPage({ searchParams }: { searchParams: Promise<{ returnTo?: string }> }) {
+  const returnTo = safeReturnTo((await searchParams).returnTo, "/tester");
   const session = await requireTesterSession("/tester/upgrade");
-  if (!session.user.isAnonymous) redirect("/tester");
+  if (!session.user.isAnonymous) redirect(returnTo);
 
   return (
     <DashboardFrame
@@ -16,7 +18,7 @@ export default async function UpgradeTesterAccountPage() {
       isGuest
       identityLabel="Guest tester"
     >
-      <EmailAuthForm mode="sign-in" intent="tester" returnTo="/tester" />
+      <EmailAuthForm mode="sign-in" intent="tester" returnTo={returnTo} />
     </DashboardFrame>
   );
 }

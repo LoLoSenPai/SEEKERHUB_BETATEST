@@ -18,8 +18,8 @@ export default async function NewReleasePage({ params }: { params: Promise<{ slu
     <DashboardFrame
       kind="builder"
       currentPath="/builder"
-      title={`Upload release for ${project.name}`}
-      subtitle="Presigned upload first, server-side APK validation second, then publish a private beta release with a clean access policy."
+      title={`New release for ${project.name}`}
+      subtitle="Upload your APK, choose your audience, and get a link to share. You review everything before publishing."
       identityLabel={session.user.email}
     >
       <BuilderJourney
@@ -32,7 +32,6 @@ export default async function NewReleasePage({ params }: { params: Promise<{ slu
       <ReleaseUploadForm
         projectId={project.id}
         projectSlug={project.slug}
-        groups={project.testerGroups.map((group) => ({ id: group.id, name: group.name }))}
         maxApkBytes={Number(session.builderProfile.maxApkBytes)}
       />
     </DashboardFrame>

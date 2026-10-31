@@ -24,7 +24,7 @@ export default async function SignUpPage({ searchParams }: { searchParams: Promi
           <div className="order-2 space-y-5 lg:order-1">
             <div className="section-eyebrow">Builder registration</div>
             <h1 className="text-4xl font-semibold tracking-tight text-foreground sm:text-5xl">Create a small, production-ready release workspace.</h1>
-            <p className="max-w-xl text-lg leading-8 text-muted-foreground">Public beta accounts start with one project, five stored releases, 250 MiB per APK, and 500 MiB total storage.</p>
+            <p className="max-w-xl text-lg leading-8 text-muted-foreground">Create a workspace for private Android releases. Public beta usage limits apply. The same account can also be used for testing.</p>
           </div>
           <div className="order-1 lg:order-2">
             <EmailAuthForm mode="sign-up" intent="builder" returnTo={returnTo} />

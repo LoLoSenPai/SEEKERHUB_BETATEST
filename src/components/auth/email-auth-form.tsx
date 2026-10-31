@@ -24,14 +24,14 @@ export function EmailAuthForm({
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const isTesterMagicLink = mode === "sign-in" && intent === "tester";
-  const testerReturnTo = returnTo.startsWith("/tester") ? returnTo : "/tester";
+  const testerReturnTo = returnTo;
 
   return (
     <Card className="w-full max-w-lg rounded-[2rem] border-border bg-surface shadow-[0_24px_90px_rgba(15,23,42,0.08)]">
       <CardHeader className="space-y-4">
         {mode === "sign-in" ? (
           <div className="grid grid-cols-2 rounded-full border border-border bg-muted p-1 text-sm font-semibold">
-            <Link href={`/sign-in?intent=builder&returnTo=${encodeURIComponent("/builder")}`} className={`rounded-full px-3 py-2 text-center ${intent === "builder" ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}>Builder</Link>
+            <Link href={`/sign-in?intent=builder&returnTo=${encodeURIComponent(returnTo)}`} className={`rounded-full px-3 py-2 text-center ${intent === "builder" ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}>Builder</Link>
             <Link href={`/sign-in?intent=tester&returnTo=${encodeURIComponent(testerReturnTo)}`} className={`rounded-full px-3 py-2 text-center ${intent === "tester" ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}>Tester</Link>
           </div>
         ) : null}
@@ -66,7 +66,7 @@ export function EmailAuthForm({
                   errorCallbackURL: `/sign-in?intent=tester&returnTo=${encodeURIComponent(returnTo)}`,
                 });
                 if (result.error) throw new Error(result.error.message ?? "Unable to send the sign-in link.");
-                router.push(`/magic-link-sent?email=${encodeURIComponent(email)}`);
+                router.push(`/magic-link-sent?email=${encodeURIComponent(email)}&returnTo=${encodeURIComponent(returnTo)}`);
                 return;
               }
 
@@ -80,7 +80,6 @@ export function EmailAuthForm({
                 router.push(`/verify-email?email=${encodeURIComponent(email)}&returnTo=${encodeURIComponent(returnTo)}`);
               } else {
                 router.push(returnTo);
-                router.refresh();
               }
             } catch (caught) {
               setError(caught instanceof Error ? caught.message : "Unable to contact the authentication service.");
@@ -120,13 +119,13 @@ export function EmailAuthForm({
           </Button>
           <div className="text-center text-sm text-muted-foreground">
             {intent === "tester" ? (
-              <Link href="/sign-in?intent=builder" className="font-medium text-foreground hover:underline">
+              <Link href={`/sign-in?intent=builder&returnTo=${encodeURIComponent(returnTo)}`} className="font-medium text-foreground hover:underline">
                 Switch to builder sign in
               </Link>
             ) : (
               <>
                 {mode === "sign-in" ? "New builder? " : "Already have an account? "}
-                <Link href={mode === "sign-in" ? "/sign-up?intent=builder" : "/sign-in?intent=builder"} className="font-medium text-foreground hover:underline">
+                <Link href={`${mode === "sign-in" ? "/sign-up?intent=builder" : "/sign-in?intent=builder"}&returnTo=${encodeURIComponent(returnTo)}`} className="font-medium text-foreground hover:underline">
                   {mode === "sign-in" ? "Create a workspace" : "Sign in"}
                 </Link>
               </>

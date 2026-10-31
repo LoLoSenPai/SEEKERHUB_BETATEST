@@ -5,7 +5,6 @@ import { buttonVariants } from "@/src/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/src/components/ui/card";
 import { EmptyState } from "@/src/components/ui/empty-state";
 import { WalletLinkCard } from "@/src/features/wallet/wallet-link-card";
-import { SeekerStatusCard } from "@/src/features/seeker/seeker-status-card";
 import { getAccessibleReleasesForUser, getTesterIdentity } from "@/src/features/projects/queries";
 import { requireTesterSession } from "@/src/lib/session";
 import { cn, formatBytes } from "@/src/lib/utils";
@@ -20,9 +19,6 @@ export default async function TesterDashboardPage() {
   const canBuild = Boolean(
     await prisma.builderProfile.findUnique({ where: { userId: session.user.id }, select: { id: true } }),
   );
-  const verifiedSeeker = tester?.wallets.some(
-    (wallet) => wallet.seekerGenesisVerificationExpiresAt && wallet.seekerGenesisVerificationExpiresAt > new Date(),
-  ) ?? false;
 
   return (
     <DashboardFrame
@@ -89,8 +85,7 @@ export default async function TesterDashboardPage() {
               <CardContent><Link href="/tester/upgrade" className={cn(buttonVariants())}>Add recovery email</Link></CardContent>
             </Card>
           ) : null}
-          <WalletLinkCard linkedWallets={tester?.wallets ?? []} />
-          <SeekerStatusCard verifiedSeeker={verifiedSeeker} />
+          {!releases.length ? <details className="rounded-[1.6rem] border border-border bg-surface p-4"><summary className="cursor-pointer font-semibold">Builder asked you to link a wallet?</summary><div className="mt-4"><WalletLinkCard linkedWallets={tester?.wallets ?? []} /></div></details> : null}
         </div>
       </div>
     </DashboardFrame>

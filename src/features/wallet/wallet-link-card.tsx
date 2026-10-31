@@ -19,7 +19,7 @@ type LinkedWalletSummary = {
   seekerGenesisVerificationExpiresAt: Date | null;
 };
 
-export function WalletLinkCard({ linkedWallets }: { linkedWallets: LinkedWalletSummary[] }) {
+export function WalletLinkCard({ linkedWallets, requiredSeeker = false, showSeeker = true }: { linkedWallets: LinkedWalletSummary[]; requiredSeeker?: boolean; showSeeker?: boolean }) {
   const router = useRouter();
   const wallet = useWallet();
   const [linking, setLinking] = useState(false);
@@ -38,7 +38,7 @@ export function WalletLinkCard({ linkedWallets }: { linkedWallets: LinkedWalletS
       <CardHeader>
         <CardTitle>Wallet access</CardTitle>
         <CardDescription>
-          Link a Solana wallet when a release needs wallet gating, allowlists, or optional verified Seeker ownership.
+          Connect your wallet, then sign a message to link it. Signing is not a payment. {requiredSeeker ? "Finally, verify your Seeker Genesis Token below." : "If the builder requires Seeker verification, verify it after linking."}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -132,7 +132,7 @@ export function WalletLinkCard({ linkedWallets }: { linkedWallets: LinkedWalletS
           >
             {linking ? "Linking..." : connectedLinkedWallet ? "Wallet already linked" : "Link connected wallet"}
           </Button>
-          <Button
+          {showSeeker ? <Button
             variant="secondary"
             disabled={!wallet.publicKey || !wallet.signMessage || verifying || !connectedLinkedWallet || connectedSeekerVerified}
             onClick={async () => {
@@ -176,7 +176,7 @@ export function WalletLinkCard({ linkedWallets }: { linkedWallets: LinkedWalletS
               : connectedSeekerVerified
                 ? "Seeker already verified"
                 : "Verify Seeker wallet"}
-          </Button>
+          </Button> : null}
         </div>
       </CardContent>
     </Card>

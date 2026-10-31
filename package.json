@@ -7,8 +7,8 @@
   },
   "overrides": {
     "postcss": "8.5.25",
-    "next": {
-      "sharp": "0.35.3"
+    "@prisma/config": {
+      "deepmerge-ts": "8.0.2"
     }
   },
   "scripts": {
@@ -22,6 +22,7 @@
     "test:integration": "vitest run --config vitest.integration.config.mts",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
+    "test:artifact": "node --test scripts/apk-worker-artifact.test.mjs",
     "db:generate": "prisma generate",
     "db:push:local": "prisma db push",
     "db:migrate": "prisma migrate dev",
@@ -44,7 +45,7 @@
     "@solana/wallet-adapter-react-ui": "^0.9.39",
     "@solana/wallet-standard-util": "^1.1.2",
     "@solana/web3.js": "^1.98.4",
-    "better-auth": "1.6.25",
+    "better-auth": "1.7.14",
     "bs58": "^6.0.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -52,10 +53,10 @@
     "file-type": "^21.0.0",
     "lucide-react": "^0.542.0",
     "nanoid": "^5.1.6",
-    "next": "16.2.12",
+    "next": "16.4.3",
     "pg": "^8.22.0",
-    "react": "19.2.4",
-    "react-dom": "19.2.4",
+    "react": "19.2.9",
+    "react-dom": "19.2.9",
     "resend": "^6.18.1",
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.3.1",
@@ -74,7 +75,7 @@
     "@types/yauzl": "^2.10.3",
     "@vitest/coverage-v8": "^4.0.8",
     "eslint": "^9",
-    "eslint-config-next": "16.2.12",
+    "eslint-config-next": "16.4.3",
     "prisma": "6.19.3",
     "tailwindcss": "^4",
     "typescript": "^5",

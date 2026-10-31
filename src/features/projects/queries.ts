@@ -1,6 +1,7 @@
 import { prisma } from "@/src/lib/db";
 import { hashInviteToken } from "@/src/lib/invite";
 import { evaluateReleaseAccess } from "@/src/lib/access";
+import type { Prisma } from "@prisma/client";
 
 export async function getBuilderDashboard(userId: string) {
   const [
@@ -198,68 +199,92 @@ export async function getInvitePreview(token: string) {
 }
 
 export async function getAccessibleReleasesForUser(userId: string) {
-  const [user, releases] = await Promise.all([
-    prisma.user.findUnique({
-      where: { id: userId },
-      include: {
-        wallets: true,
-        testerMemberships: true,
-        testerAccesses: true,
-        inviteClaims: {
-          include: {
-            inviteLink: { include: { release: { include: { accessPolicy: true } } } },
-          },
-        },
-        deviceProfiles: {
-          orderBy: { capturedAt: "desc" },
-          take: 1,
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    include: {
+      wallets: true,
+      testerMemberships: true,
+      testerAccesses: true,
+      inviteClaims: {
+        include: {
+          inviteLink: { include: { release: { include: { accessPolicy: true } } } },
         },
       },
-    }),
-    prisma.release.findMany({
-      where: {
-        status: "PUBLISHED",
-        deletedAt: null,
-        project: { deletedAt: null },
+      deviceProfiles: {
+        orderBy: { capturedAt: "desc" },
+        take: 1,
       },
-      include: {
-        project: true,
-        buildAsset: true,
-        accessPolicy: {
-          include: {
-            walletEntries: true,
-          },
-        },
-      },
-      orderBy: { publishedAt: "desc" },
-    }),
-  ]);
-
+    },
+  });
   if (!user) return [];
 
-  const accessibleReleases: typeof releases = [];
-  for (const release of releases) {
-    if (!release.accessPolicy) {
-      continue;
+  const revokedProjects = user.testerAccesses.filter((access) => access.revokedAt).map((access) => access.projectId);
+  const activeGroups = user.testerMemberships.filter((membership) => !membership.revokedAt)
+    .flatMap((membership) => membership.testerGroupId ? [membership.testerGroupId] : []);
+  const candidates: Prisma.ReleaseWhereInput[] = user.inviteClaims.filter((claim) => !claim.revokedAt).map((claim) => {
+    const invite = claim.inviteLink;
+    if (!invite.releaseId) return { projectId: invite.projectId };
+    if (claim.grantedAt && invite.release?.accessPolicy?.allowPreviousReleases) {
+      return { projectId: invite.projectId, OR: [{ id: invite.releaseId }, { publishedAt: { lte: invite.release.publishedAt } }] };
     }
+    return { projectId: invite.projectId, id: invite.releaseId };
+  });
+  candidates.push({ accessPolicy: {
+    requireInviteAcceptance: false,
+    AND: [
+      { OR: [{ testerGroupId: null }, { testerGroupId: { in: activeGroups } }] },
+      { OR: [{ walletEntries: { none: {} } }, { walletEntries: { some: { address: { in: user.wallets.map(({ address }) => address) } } } }] },
+    ],
+  } });
 
-    const decision = evaluateReleaseAccess({
-      policy: release.accessPolicy,
-      testerMemberships: user.testerMemberships,
-      inviteClaims: user.inviteClaims,
-      wallets: user.wallets,
-      deviceProfile: user.deviceProfiles[0] ?? null,
-      releaseId: release.id,
-      projectId: release.projectId,
-      releasePublishedAt: release.publishedAt,
-      testerAccessRevoked: user.testerAccesses.some(
-        (access) => access.projectId === release.projectId && Boolean(access.revokedAt),
-      ),
-    });
+  const findPage = (cursor?: { publishedAt: Date; id: string }) => prisma.release.findMany({
+    where: {
+      status: "PUBLISHED",
+      deletedAt: null,
+      projectId: { notIn: revokedProjects },
+      project: { deletedAt: null },
+      AND: [
+        { OR: candidates },
+        ...(cursor ? [{ OR: [{ publishedAt: { lt: cursor.publishedAt } }, { publishedAt: cursor.publishedAt, id: { lt: cursor.id } }] }] : []),
+      ],
+    },
+    include: {
+      project: true,
+      buildAsset: true,
+      accessPolicy: {
+        include: { walletEntries: true },
+      },
+    },
+    orderBy: [{ publishedAt: "desc" }, { id: "desc" }],
+    take: 100,
+  });
 
-    if (decision.canViewMetadata) {
-      accessibleReleases.push(release);
+  const accessibleReleases: Awaited<ReturnType<typeof findPage>> = [];
+  let cursor: { publishedAt: Date; id: string } | undefined;
+  // Bound each fetch, not the result: never silently hide an older eligible build.
+  for (;;) {
+    const releases = await findPage(cursor);
+    for (const release of releases) {
+      if (!release.accessPolicy) continue;
+
+      const decision = evaluateReleaseAccess({
+        policy: release.accessPolicy,
+        testerMemberships: user.testerMemberships,
+        inviteClaims: user.inviteClaims,
+        wallets: user.wallets,
+        deviceProfile: user.deviceProfiles[0] ?? null,
+        releaseId: release.id,
+        projectId: release.projectId,
+        releasePublishedAt: release.publishedAt,
+        testerAccessRevoked: user.testerAccesses.some(
+          (access) => access.projectId === release.projectId && Boolean(access.revokedAt),
+        ),
+      });
+
+      if (decision.canViewMetadata) accessibleReleases.push(release);
     }
+    if (releases.length < 100) break;
+    cursor = releases[releases.length - 1];
   }
 
   return accessibleReleases;

@@ -51,7 +51,7 @@ test("builder adds private app images and an invited tester can return to feedba
     const token = randomBytes(24).toString("base64url");
     await prisma.inviteLink.create({ data: { projectId: project.id, releaseId: release.id, createdById: owner.id, tokenHash: createHash("sha256").update(token).digest("hex"), label: "Review testers" } });
     const page = await builder.newPage();
-    await page.goto(`${baseUrl}/sign-in?intent=builder&returnTo=${encodeURIComponent(`/builder/apps/${project.slug}`)}`);
+    await page.goto(`${baseUrl}/sign-in?method=password&returnTo=${encodeURIComponent(`/builder/apps/${project.slug}`)}`);
     await page.getByLabel("Email", { exact: true }).fill(email);
     await page.getByLabel("Password", { exact: true }).fill(password);
     await page.getByRole("button", { name: "Sign in", exact: true }).click();

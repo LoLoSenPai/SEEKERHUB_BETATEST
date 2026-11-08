@@ -12,6 +12,7 @@ import {
   registerMwa,
 } from "@solana-mobile/wallet-standard-mobile";
 import { getClientEnv } from "@/src/lib/env";
+import { getWalletAppIdentity } from "@/src/lib/brand";
 import { registerSeekerWallet } from "./seeker-wallet-registration";
 import { getWalletErrorCode, getWalletErrorMessage } from "./wallet-error";
 
@@ -21,11 +22,7 @@ function registerMobileWallet(appOrigin: string) {
   if (mobileWalletRegistered || typeof window === "undefined") return;
 
   registerMwa({
-    appIdentity: {
-      name: "SeekerHub",
-      uri: appOrigin,
-      icon: "/favicon.ico",
-    },
+    appIdentity: getWalletAppIdentity(appOrigin),
     authorizationCache: createDefaultAuthorizationCache(),
     chains: ["solana:mainnet"],
     chainSelector: createDefaultChainSelector(),

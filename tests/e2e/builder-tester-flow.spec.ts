@@ -65,7 +65,7 @@ test("uploads a synthetic APK through the UI and serves the exact bytes to a gue
     const project = await prisma.appProject.create({ data: { ownerId: builder.id, name: `Upload test ${id}`, slug } });
     const page = await builderContext.newPage();
     const projectUrl = `/builder/apps/${slug}`;
-    await page.goto(`${baseUrl}/sign-in?intent=builder&returnTo=${encodeURIComponent(projectUrl)}`);
+    await page.goto(`${baseUrl}/sign-in?method=password&returnTo=${encodeURIComponent(projectUrl)}`);
     await page.getByLabel("Email", { exact: true }).fill(email);
     await page.getByLabel("Password", { exact: true }).fill(password);
     await page.getByRole("button", { name: "Sign in", exact: true }).click();
@@ -176,7 +176,7 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 1440, height: 900 
       } });
       const draftUrl = `/builder/apps/${slug}/releases/${release.id}`;
       const builderPage = await builderContext.newPage();
-      await builderPage.goto(`${baseUrl}/sign-in?intent=builder&returnTo=${encodeURIComponent(draftUrl)}`);
+      await builderPage.goto(`${baseUrl}/sign-in?method=password&returnTo=${encodeURIComponent(draftUrl)}`);
       await builderPage.getByLabel("Email", { exact: true }).fill(email);
       await builderPage.getByLabel("Password", { exact: true }).fill(password);
       await builderPage.getByRole("button", { name: "Sign in", exact: true }).click();

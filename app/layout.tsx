@@ -3,6 +3,7 @@ import { IBM_Plex_Mono, Manrope } from "next/font/google";
 import "./globals.css";
 import "@solana/wallet-adapter-react-ui/styles.css";
 import { Providers } from "./providers";
+import { BRAND_ICONS, BRAND_NAME } from "@/src/lib/brand";
 
 const manrope = Manrope({
   variable: "--font-manrope",
@@ -16,8 +17,10 @@ const plexMono = IBM_Plex_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "SeekerHub",
+  title: BRAND_NAME,
+  applicationName: BRAND_NAME,
   description: "Private Android beta distribution for Solana Seeker and Android builders.",
+  icons: BRAND_ICONS,
 };
 
 const themeInitScript = `try{var key='seekerhub-theme';var theme=localStorage.getItem(key);if(theme!=='light'&&theme!=='dark'){theme=window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';}document.documentElement.dataset.theme=theme;document.documentElement.style.colorScheme=theme;}catch(e){}`;

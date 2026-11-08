@@ -2,12 +2,20 @@
 
 SeekerHub is a web-first private Android beta distribution service for Solana Mobile builders. Builders upload signed APKs to private object storage, publish policy-gated releases, invite testers, and collect release-specific feedback. It is not an app store and it does not claim to cryptographically certify APK signatures.
 
-## Redesign Checkpoint (2026-11-08)
+## Unified Entry (2026-11-08)
+
+The homepage presents the product and sends visitors to one sign-in screen. Email links can create or recover an account; wallet sign-in and existing password accounts use the same entry. Safe invitation destinations take priority over the default `/dashboard` route.
+
+The dashboard remembers **Publishing / Testing** per account and browser. Switching does not grant permissions: publishing still requires a verified email and explicit builder activation. A wallet-only account can add and verify an email without losing its wallet or tester activity; established accounts are never silently merged.
+
+The connected-block brand icon is shared by the site, browser tabs and wallet app identity. Its source, generation prompt and packaging instructions are in [assets/brand](assets/brand/README.md). No schema migration or new environment variable is required. Production rollout from `main` was explicitly approved on 2026-11-08; see the [readiness checkpoint](docs/beta-readiness.md) for validation and deployment evidence.
+
+## Previous Redesign Release (2026-11-08)
 
 - Chosen visual direction: light blue surfaces, black accents and a desktop sidebar. Mobile tester navigation is **My apps / Feedback / Account**, with tester-visible feedback history.
 - Private app icons, banners and screenshots are normalized to WebP, with bounded inputs/outputs, an 8 MiB per-project cap and shared builder-quota accounting. See the [media feature README](src/features/project-media/README.md) for exact limits, authorization and cleanup behavior.
 - SGT-required invitation/release contexts can opt into explicit `SIGN_IN_AND_VERIFY_SGT`: one signature authorizes both login and a fresh server-side SGT check. RPC failure retains login without granting or refreshing SGT verification. Existing `SIGN_IN` is unchanged; already-linked wallets keep an explicit separate SGT action. Neither flow is hardware attestation.
-- Current local validation: **355 unit tests across 45 files; 80 integration tests across 12 files; 20/20 E2E tests; lint, typecheck, production build and isolated artifact check pass**. Desktop/mobile visual evidence and the reviewed boundaries are recorded in [design-qa.md](design-qa.md).
+- Validation for that deployed redesign: **355 unit tests across 45 files; 80 integration tests across 12 files; 20/20 E2E tests; lint, typecheck, production build and isolated artifact check pass**. Desktop/mobile visual evidence and the reviewed boundaries are recorded in [design-qa.md](design-qa.md).
 - **Deployed on 2026-11-08** from `main` to `https://seeker-hub.lololabs.xyz`. Additive migration `20261108000000_project_media` is applied to Neon after backup/restore validation. Public production health and authorization smoke checks pass; see the readiness checkpoint for deployment evidence and remaining real-device checks.
 
 ## Stack

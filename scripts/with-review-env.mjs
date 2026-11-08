@@ -3,7 +3,9 @@ import { spawn } from "node:child_process";
 
 const [script, ...args] = process.argv.slice(2);
 if (!script) throw new Error("Usage: node scripts/with-review-env.mjs <node entrypoint> [...args]");
-const baseUrl = "http://127.0.0.1:3100";
+const port = Number(process.env.REVIEW_PORT ?? 3100);
+if (!Number.isInteger(port) || port < 1024 || port > 65535) throw new Error("REVIEW_PORT must be a local port between 1024 and 65535.");
+const baseUrl = `http://127.0.0.1:${port}`;
 const env = {
   ...process.env,
   DATABASE_URL: "postgresql://postgres:review-local-only@127.0.0.1:5437/seekerhub_redesign_test",

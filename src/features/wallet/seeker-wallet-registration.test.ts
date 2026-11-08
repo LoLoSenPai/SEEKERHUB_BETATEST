@@ -44,7 +44,7 @@ describe("Seeker Connect registration", () => {
     registerSeekerWallet("relay.solanamobile.com", true);
     registerSeekerWallet("relay.solanamobile.com", true);
     expect(mocks.register).toHaveBeenCalledExactlyOnceWith({
-      identity: { name: "SeekerHub", uri: "https://actual.example.test", icon: "/favicon.ico" },
+      identity: { name: "SeekerHub", uri: "https://actual.example.test", icon: "/brand/seekerhub-icon.png" },
       relayDomain: "relay.solanamobile.com", chain: "solana:mainnet",
     });
     expect(mocks.register.mock.calls[0][0]).not.toHaveProperty("firstConnectWalletBaseUri");

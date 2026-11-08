@@ -169,22 +169,56 @@ integration("session-bound wallet domain API (only RPC mocked)", () => {
   it("charges the per-user budget even for positive cache hits", async () => {
     const current = await session();
     await rpc.addPrimary(current.wallet.address);
-    for (let attempt = 0; attempt < 30; attempt += 1) {
-      const response = await POST(request({ address: current.wallet.address }, current.cookie));
-      expect(response.status, await response.clone().text()).toBe(200);
+    // Freeze only the limiter clock; keep database, body-reading and RPC timers real.
+    const now = Date.now();
+    const clock = vi.spyOn(Date, "now").mockReturnValue(now);
+    try {
+      for (let attempt = 0; attempt < 30; attempt += 1) {
+        const response = await POST(request({ address: current.wallet.address }, current.cookie));
+        expect(response.status, await response.clone().text()).toBe(200);
+      }
+      const limited = await POST(request({ address: current.wallet.address }, current.cookie));
+      expect(limited.status).toBe(429);
+      expect(limited.headers.get("retry-after")).toBe("60");
+      expect(rpc.requests).toHaveLength(2);
+    } finally {
+      clock.mockRestore();
     }
-    const limited = await POST(request({ address: current.wallet.address }, current.cookie));
-    expect(limited.status).toBe(429);
-    expect(limited.headers.get("retry-after")).toBe("60");
-    expect(rpc.requests).toHaveLength(2);
   });
 
   it("also bounds unauthenticated probes by IP without spending any RPC quota", async () => {
     const address = randomWalletAddress();
-    for (let attempt = 0; attempt < 60; attempt += 1) {
-      expect((await POST(request({ address }))).status).toBe(401);
+    const windowStartedAt = new Date(Math.floor(Date.now() / 60_000) * 60_000);
+    const nextWindow = new Date(windowStartedAt.getTime() + 60_000);
+    // A real-time burst can cross a fixed minute boundary and legitimately reset its quota.
+    const clock = vi.spyOn(Date, "now").mockReturnValue(nextWindow.getTime() - 1);
+    const keyHash = hashRateLimitIdentity(`ip:${ip}:global`);
+    try {
+      for (let attempt = 0; attempt < 60; attempt += 1) {
+        const response = await POST(request({ address }));
+        expect(response.status).toBe(401);
+        expect(await response.json()).toMatchObject({ code: "AUTH_REQUIRED" });
+      }
+      const limited = await POST(request({ address }));
+      expect(limited.status).toBe(429);
+      expect(await limited.json()).toMatchObject({ code: "RATE_LIMITED" });
+      expect(limited.headers.get("retry-after")).toBe("60");
+      expect(await prisma.rateLimitBucket.findMany({ where: { action: "wallet.domain.ip", keyHash } })).toEqual([
+        expect.objectContaining({ windowStartedAt, expiresAt: nextWindow, count: 61 }),
+      ]);
+
+      clock.mockReturnValue(nextWindow.getTime());
+      const reset = await POST(request({ address }));
+      expect(reset.status).toBe(401);
+      expect(await reset.json()).toMatchObject({ code: "AUTH_REQUIRED" });
+      expect(reset.headers.get("retry-after")).toBeNull();
+      expect(await prisma.rateLimitBucket.findMany({ where: { action: "wallet.domain.ip", keyHash }, orderBy: { windowStartedAt: "asc" } })).toEqual([
+        expect.objectContaining({ windowStartedAt, expiresAt: nextWindow, count: 61 }),
+        expect.objectContaining({ windowStartedAt: nextWindow, expiresAt: new Date(nextWindow.getTime() + 60_000), count: 1 }),
+      ]);
+      expect(rpc.fetch).not.toHaveBeenCalled();
+    } finally {
+      clock.mockRestore();
     }
-    expect((await POST(request({ address }))).status).toBe(429);
-    expect(rpc.fetch).not.toHaveBeenCalled();
   });
 });

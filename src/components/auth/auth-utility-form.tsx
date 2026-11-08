@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { authClient } from "@/src/lib/auth-client";
+import { getAuthReturnTo } from "@/src/lib/auth-navigation";
 import { Button } from "@/src/components/ui/button";
 import { Input } from "@/src/components/ui/input";
 import { Label } from "@/src/components/ui/label";
@@ -37,7 +38,7 @@ export function VerificationResendForm({ initialEmail, returnTo }: { initialEmai
   );
 }
 
-export function ForgotPasswordForm() {
+export function ForgotPasswordForm({ returnTo = "/dashboard" }: { returnTo?: string } = {}) {
   const inFlight = useRef(false);
   const [sent, setSent] = useState(false);
   const [pending, setPending] = useState(false);
@@ -49,7 +50,7 @@ export function ForgotPasswordForm() {
       inFlight.current = true;
       setPending(true);
       try {
-        const result = await authClient.requestPasswordReset({ email, redirectTo: "/reset-password" });
+        const result = await authClient.requestPasswordReset({ email, redirectTo: `/reset-password?returnTo=${encodeURIComponent(getAuthReturnTo({ returnTo }))}` });
         if (result.error) throw new Error("Unable to request a reset link.");
         setSent(true);
       } catch {
@@ -58,14 +59,14 @@ export function ForgotPasswordForm() {
         setPending(false);
       }
     }}>
-      <Label htmlFor="reset-email">Builder email</Label>
+      <Label htmlFor="reset-email">Email</Label>
       <Input id="reset-email" name="email" type="email" required />
       <Button disabled={pending}>{pending ? "Sending..." : "Send reset link"}</Button>
     </form>
   );
 }
 
-export function ResetPasswordForm({ token }: { token?: string }) {
+export function ResetPasswordForm({ token, returnTo = "/dashboard" }: { token?: string; returnTo?: string }) {
   const router = useRouter();
   const inFlight = useRef(false);
   const [pending, setPending] = useState(false);
@@ -80,7 +81,7 @@ export function ResetPasswordForm({ token }: { token?: string }) {
         const result = await authClient.resetPassword({ newPassword: password, token });
         if (result.error) throw new Error(result.error.message ?? "Unable to reset password.");
         toast.success("Password updated.");
-        router.push("/sign-in?intent=builder");
+        router.push(`/sign-in?method=password&returnTo=${encodeURIComponent(getAuthReturnTo({ returnTo }))}`);
       } catch {
         toast.error("Unable to reset password. Please try again.");
         inFlight.current = false;

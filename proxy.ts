@@ -7,7 +7,6 @@ export function proxy(request: NextRequest) {
 
   if (!sessionCookie && (request.nextUrl.pathname.startsWith("/builder") || request.nextUrl.pathname.startsWith("/admin"))) {
     const signInUrl = new URL("/sign-in", request.url);
-    signInUrl.searchParams.set("intent", "builder");
     signInUrl.searchParams.set("returnTo", `${request.nextUrl.pathname}${request.nextUrl.search}`);
     return NextResponse.redirect(signInUrl);
   }

@@ -7,7 +7,7 @@ import { SignOutButton } from "@/src/components/layout/sign-out-button";
 import { ThemeToggle } from "@/src/components/theme/theme-toggle";
 import { WalletName } from "@/src/features/wallet/wallet-name";
 
-export function AccountMenu({ kind, isGuest, identityLabel, walletAddress }: {
+export function AccountMenu({ isGuest, identityLabel, walletAddress }: {
   kind: "builder" | "tester"; isGuest: boolean; identityLabel: string; walletAddress?: string;
 }) {
   const [open, setOpen] = useState(false);
@@ -29,7 +29,7 @@ export function AccountMenu({ kind, isGuest, identityLabel, walletAddress }: {
     {open ? <div className="absolute right-0 top-full z-50 mt-2 w-64 max-w-[calc(100vw-2rem)] space-y-3 rounded-2xl border border-border bg-card p-4 text-foreground shadow-xl lg:bottom-full lg:left-0 lg:top-auto lg:mb-2 lg:mt-0">
       <p className="break-words text-sm font-semibold">{isGuest ? "Guest tester" : identityLabel}</p>
       {isGuest ? <p className="text-xs leading-5 text-muted-foreground">Your access is saved in this browser. Add an email or wallet to find your apps on another device.</p> : null}
-      {kind === "tester" ? <Link className="block text-sm font-semibold underline underline-offset-4" href={isGuest ? "/tester/upgrade" : "/tester/account"}>{isGuest ? "Save your access" : "Manage account"}</Link> : null}
+      <Link className="block text-sm font-semibold underline underline-offset-4" href={isGuest ? "/tester/upgrade" : "/tester/account"}>{isGuest ? "Save your access" : "Manage account"}</Link>
       <div className="flex flex-wrap items-center gap-2 border-t border-border pt-3"><ThemeToggle />{!isGuest ? <SignOutButton /> : null}</div>
     </div> : null}
   </div>;

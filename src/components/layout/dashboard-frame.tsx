@@ -1,6 +1,8 @@
 import Link from "next/link";
-import { ArrowLeftRight, Grid2X2, MessageSquare, Plus, Square, Trash2, UserRound } from "lucide-react";
+import { Grid2X2, MessageSquare, Plus, Trash2, UserRound } from "lucide-react";
+import { BrandIcon } from "@/src/components/brand/brand-icon";
 import { AccountMenu } from "@/src/components/layout/account-menu";
+import { WorkspaceSwitcher } from "@/src/components/layout/workspace-switcher";
 import { cn } from "@/src/lib/utils";
 
 const builderItems = [
@@ -14,7 +16,7 @@ const testerItems = [
   { href: "/tester/account", label: "Account", icon: UserRound },
 ];
 
-export function DashboardFrame({ kind, currentPath, title, subtitle, canBuild = false, isGuest = false,
+export function DashboardFrame({ kind, currentPath, title, subtitle, isGuest = false,
   identityLabel = "Signed in", identityWalletAddress, projectLinks = [], compactHeader = false, children,
 }: {
   kind: "builder" | "tester"; currentPath: string; title: string; subtitle: string;
@@ -31,22 +33,22 @@ export function DashboardFrame({ kind, currentPath, title, subtitle, canBuild = 
     <div className="workspace min-h-screen min-w-0 bg-background">
       <a href="#workspace-content" className="sr-only z-[80] rounded-lg bg-primary p-3 text-primary-foreground focus:not-sr-only focus:fixed focus:left-4 focus:top-4">Skip to content</a>
       <aside className="workspace-sidebar fixed inset-y-0 left-0 z-40 hidden w-60 flex-col px-4 py-7 lg:flex">
-        <Link href={kind === "builder" ? "/builder" : "/tester"} className="mb-10 flex items-center gap-2.5 px-3 text-2xl font-bold tracking-tight"><Square className="size-7" aria-hidden="true" />SeekerHub</Link>
-        <p className="px-3 text-[10px] font-semibold uppercase tracking-[0.18em] text-white/60">{kind === "builder" ? "Publishing workspace" : "Your beta library"}</p>
+        <Link href="/dashboard" className="mb-7 flex items-center gap-2.5 px-3 text-2xl font-bold tracking-tight"><BrandIcon size={28} />SeekerHub</Link>
+        <WorkspaceSwitcher current={kind === "builder" ? "publishing" : "testing"} dark />
+        <p className="mt-7 px-3 text-[10px] font-semibold uppercase tracking-[0.18em] text-white/60">{kind === "builder" ? "Publishing workspace" : "Your beta library"}</p>
         <nav aria-label="Workspace" className="mt-4 grid gap-1.5">
           {items.map(({ href, label, icon: Icon }) => <Link key={href} href={href} aria-current={active(href) ? "page" : undefined} className={cn("sidebar-link flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-semibold", active(href) && "sidebar-link-active")}><Icon className="size-5" aria-hidden="true" />{label}</Link>)}
         </nav>
         {kind === "builder" ? <Link href="/builder/apps/new" className="sidebar-link mt-4 flex items-center gap-3 rounded-xl border border-white/20 px-4 py-3 text-sm font-semibold"><Plus className="size-5" aria-hidden="true" />New app</Link> : null}
         {projectLinks.length ? <div className="mt-7 min-h-0 overflow-y-auto border-t border-white/15 pt-6"><p className="px-3 text-[10px] font-semibold uppercase tracking-[0.18em] text-white/60">My apps</p><div className="mt-3 grid gap-1">{projectLinks.map(project => <Link key={project.slug} href={`/builder/apps/${project.slug}`} className="sidebar-link flex min-w-0 items-center gap-3 rounded-xl px-3 py-2.5 text-sm"><Grid2X2 className="size-4 shrink-0" aria-hidden="true" /><span className="truncate">{project.name}</span></Link>)}</div></div> : null}
         <div className="mt-auto space-y-4 pt-8">
-          {kind === "builder" || canBuild ? <Link href={kind === "builder" ? "/tester" : "/builder"} className="sidebar-link flex items-center gap-2 rounded-lg px-3 py-2 text-xs"><ArrowLeftRight className="size-4" aria-hidden="true" />{kind === "builder" ? "Switch to testing" : "Builder workspace"}</Link> : null}
           {account}
         </div>
       </aside>
       <div className="lg:pl-60">
-        <header className="flex min-w-0 items-center justify-between gap-4 border-b border-border bg-card px-4 py-3 lg:hidden">
-          <Link href={kind === "builder" ? "/builder" : "/tester"} className="flex items-center gap-2 font-bold tracking-tight"><Square className="size-5" aria-hidden="true" />SeekerHub</Link>
-          <div className="flex min-w-0 items-center gap-2">{kind === "builder" || canBuild ? <Link href={kind === "builder" ? "/tester" : "/builder"} className="rounded-lg border border-border px-3 py-2 text-xs font-semibold">{kind === "builder" ? "Testing" : "Builder"}</Link> : null}{account}</div>
+        <header className="min-w-0 space-y-3 border-b border-border bg-card px-4 py-3 lg:hidden">
+          <div className="flex items-center justify-between gap-4"><Link href="/dashboard" className="flex items-center gap-2 font-bold tracking-tight"><BrandIcon size={24} />SeekerHub</Link>{account}</div>
+          <WorkspaceSwitcher current={kind === "builder" ? "publishing" : "testing"} />
         </header>
         <div className="mx-auto w-full min-w-0 max-w-[1500px] px-4 pb-28 pt-6 sm:px-7 lg:px-10 lg:pb-12 lg:pt-8">
           <main id="workspace-content" tabIndex={-1} className="min-w-0 outline-none">

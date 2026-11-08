@@ -5,6 +5,7 @@ import { prisma } from "@/src/lib/db";
 import { getServerEnv } from "@/src/lib/env";
 import { AppError } from "@/src/lib/errors";
 import { safeReturnTo } from "@/src/lib/redirect";
+import { needsAccountEmail } from "@/src/lib/workspace";
 
 export async function getSession() {
   return auth.api.getSession({ headers: await headers() });
@@ -39,14 +40,15 @@ export async function requireOptionalSession() {
 
 export async function requireTesterSession(returnTo = "/tester") {
   const session = await getSession();
-  if (!session) redirect(`/sign-in?intent=tester&returnTo=${encodeURIComponent(returnTo)}`);
+  if (!session) redirect(`/sign-in?returnTo=${encodeURIComponent(returnTo)}`);
   return session;
 }
 
 export async function requireBuilderSession(destination?: string) {
   const returnTo = safeReturnTo(destination ?? (await headers()).get("x-seekerhub-return-to"), "/builder");
   const session = await getSession();
-  if (!session || session.user.isAnonymous) redirect(`/sign-in?intent=builder&returnTo=${encodeURIComponent(returnTo)}`);
+  if (!session || session.user.isAnonymous) redirect(`/sign-in?returnTo=${encodeURIComponent(returnTo)}`);
+  if (needsAccountEmail(session.user.email)) redirect(`/builder/onboarding?returnTo=${encodeURIComponent(returnTo)}`);
   if (!session.user.emailVerified) redirect(`/verify-email?email=${encodeURIComponent(session.user.email)}&returnTo=${encodeURIComponent(returnTo)}`);
 
   const builderProfile = await findBuilderProfile(session.user);

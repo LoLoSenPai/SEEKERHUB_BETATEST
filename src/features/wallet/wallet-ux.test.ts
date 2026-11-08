@@ -141,7 +141,7 @@ describe("wallet UI", () => {
 
   it("offers new-wallet creation and recovery with the same action", () => {
     const markup = renderToStaticMarkup(createElement(WalletSignIn));
-    expect(markup).toContain("New wallet? Create tester access");
+    expect(markup).toContain("New wallet? Create an account");
     expect(markup).toContain("Recover your apps and feedback");
     expect(mocks.wallet.signMessage).not.toHaveBeenCalled();
   });

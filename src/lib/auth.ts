@@ -20,6 +20,21 @@ export const auth = betterAuth({
   database: prismaAdapter(prisma, {
     provider: "postgresql",
   }),
+  user: {
+    changeEmail: {
+      enabled: true,
+      updateEmailWithoutVerification: false,
+      sendChangeEmailConfirmation: async ({ user, newEmail, url }) => {
+        await sendTransactionalEmail({
+          to: user.email,
+          subject: "Confirm your SeekerHub email change",
+          text: `Confirm the request to change your account email to ${newEmail}. Your account and linked wallets stay the same.`,
+          actionLabel: "Confirm email change",
+          actionUrl: url,
+        });
+      },
+    },
+  },
   emailAndPassword: {
     enabled: true,
     autoSignIn: true,
@@ -41,7 +56,7 @@ export const auth = betterAuth({
       await sendTransactionalEmail({
         to: user.email,
         subject: "Verify your SeekerHub email",
-        text: "Verify this email address before publishing private Android builds.",
+        text: "Verify this email address to securely access your SeekerHub account.",
         actionLabel: "Verify email",
         actionUrl: url,
       });
@@ -57,6 +72,7 @@ export const auth = betterAuth({
       "/sign-up/email": { window: 15 * 60, max: 5 },
       "/request-password-reset": { window: 15 * 60, max: 5 },
       "/send-verification-email": { window: 15 * 60, max: 5 },
+      "/change-email": { window: 15 * 60, max: 5 },
     },
   },
   plugins: [
@@ -73,7 +89,7 @@ export const auth = betterAuth({
         await sendTransactionalEmail({
           to: email,
           subject: "Your SeekerHub sign-in link",
-          text: "Open this link to recover your tester access on this device.",
+          text: "Open this secure link to sign in to your SeekerHub account. Use the same browser to keep your guest access.",
           actionLabel: "Continue to SeekerHub",
           actionUrl: url,
         });

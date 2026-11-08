@@ -30,11 +30,11 @@ export function ContinueWithWallet({ action, disabled = false, accountWalletConn
           {action.pending ? action.refreshing ? "Updating access..." : "Completing wallet access..." : sgtContext ? "Continue with wallet + check SGT" : "Continue with wallet"}
         </Button> : null}
         <p className="text-xs leading-5 text-muted-foreground">
-          {!wallet.signMessage ? "This wallet does not support message signing. Disconnect and select a compatible wallet." : accountWalletConnected ? "This wallet is linked to your tester account." : sgtContext ? "One signature authorizes both tester sign-in and a fresh on-chain SGT ownership check for this beta. No payment. This does not prove your current device is a Seeker." : "Sign a message to create or recover your tester access. This is not a payment."}
+          {!wallet.signMessage ? "This wallet does not support message signing. Disconnect and select a compatible wallet." : accountWalletConnected ? "This wallet is linked to your account." : sgtContext ? "One signature authorizes both sign-in and a fresh on-chain SGT ownership check for this beta. No payment. This does not prove your current device is a Seeker." : "Sign a message to create or recover your SeekerHub account. This is not a payment."}
         </p>
       </> : <>
         <WalletConnectButton disabled={disabled || action.pending} onChoose={onChoose} />
-        <p className="text-xs leading-5 text-muted-foreground">{sgtContext ? "Connect your wallet, then sign once to authorize tester sign-in and a fresh SGT ownership check. No payment is requested." : "Connect your wallet, then confirm your tester access with a signature. No payment is requested."}</p>
+        <p className="text-xs leading-5 text-muted-foreground">{sgtContext ? "Connect your wallet, then sign once to authorize sign-in and a fresh SGT ownership check. No payment is requested." : "Connect your wallet, then sign in with a signature. No payment is requested."}</p>
         <p className="text-xs leading-5 text-muted-foreground">On Android, your default compatible wallet may open directly. Choose the account inside your wallet.</p>
       </>}
       {action.error ? <p role="alert" className="text-sm text-danger">{action.error}</p> : null}

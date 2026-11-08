@@ -33,7 +33,7 @@ const test = base.extend<{ builder: { slug: string; releaseId: string; id: strin
       await prisma.account.create({ data: { userId: user.id, accountId: user.id, providerId: "credential", password: await hashPassword(password) } });
       const project = await prisma.appProject.create({ data: { ownerId: user.id, name: "Transition project", slug: `transitions-${id}` } });
       const release = await prisma.release.create({ data: { projectId: project.id, createdById: user.id, status: "DRAFT", versionName: "1.0", versionCode: 1, changelog: "Draft release" } });
-      await page.goto(`${baseUrl}/sign-in?intent=builder&returnTo=${encodeURIComponent(`/builder/apps/${project.slug}`)}`);
+      await page.goto(`${baseUrl}/sign-in?method=password&returnTo=${encodeURIComponent(`/builder/apps/${project.slug}`)}`);
       await page.getByLabel("Email", { exact: true }).fill(email);
       await page.getByLabel("Password", { exact: true }).fill(password);
       await page.getByRole("button", { name: "Sign in", exact: true }).click();
@@ -185,7 +185,7 @@ test("publish failure retains review and permits retry; success holds controls t
 
 test("builder email sign-in preserves values and synchronous lock after success; error permits retry", async ({ page }) => {
   const { baseUrl } = localEnvironment();
-  await page.goto(`${baseUrl}/sign-in?intent=builder&returnTo=%2Fbuilder%2Fapps%2Fnew`);
+  await page.goto(`${baseUrl}/sign-in?method=password&returnTo=%2Fbuilder%2Fapps%2Fnew`);
   let attempts = 0;
   await page.route("**/api/auth/sign-in/email", async (route) => {
     attempts++;

@@ -1,0 +1,9 @@
+# SeekerHub brand icon
+
+Generated with the built-in image generation tool on 2026-11-08. The selected mark uses two connected modules rather than an S monogram. It represents a build passing from its developer to a tester and does not claim affiliation with Solana Mobile.
+
+`seekerhub-icon-source.png` preserves the generated source. Run `node scripts/build-brand-icons.mjs` to package it as the 512px wallet/site PNG, 32px favicon PNG, 180px Apple touch icon and multi-resolution ICO. This only resizes/encodes the artwork; it does not redraw it. Public assets live in `public/brand/`, with the ICO in `app/favicon.ico`.
+
+## Generation prompt
+
+Create ONE polished, finished 1:1 square app icon for SeekerHub, an independent private Android beta distribution utility. This must be a distinctive NON-LETTER symbol: absolutely NO S, NO SH, no wordmark, no resemblance to the Solana three-stripe logo. Concept: exactly two softly squared white solid modules, placed diagonally upper-left and lower-right, joined by one short thick white diagonal bridge. One compact simple linked-blocks silhouette, representing a build passing from a developer to a tester. The modules are almost square with modest corner radii, not capsules, not hollow rings, not a chain-link symbol. Strong balanced geometry, crisp flat vector-like shapes, large enough to read as a favicon at 16 and 32 pixels. Keep the white silhouette in the central 70 percent of the square, with generous even margins. Full-bleed opaque background royal blue #2856C7 with a very subtle luminous blue gradient from upper-left to lower-right. White foreground only. Professional, intentional, restrained. No tiny details, no letters, no arrows, no shadows, no 3D, no enclosing border, no presentation mockup, no extra icon options. Output a single square 1024x1024 production icon.

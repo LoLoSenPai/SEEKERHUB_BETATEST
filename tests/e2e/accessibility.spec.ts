@@ -4,6 +4,8 @@ import { expect, test } from "@playwright/test";
 for (const route of ["/", "/sign-in", "/sign-in?method=password&returnTo=%2Ftester", "/sign-up"]) {
   test(`has no automated accessibility violations on ${route}`, async ({ page }) => {
     await page.goto(route);
+    // Next can stream the loading shell before the page content on a cold start.
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
     const results = await new AxeBuilder({ page }).analyze();
     expect(results.violations).toEqual([]);
   });
@@ -15,6 +17,7 @@ for (const width of [320, 390, 1440]) {
     await page.setViewportSize({ width, height: 900 });
     for (const route of ["/", "/sign-in", "/sign-up"]) {
       await page.goto(route);
+      await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
       for (const theme of ["light", "dark"]) {
         if (await page.locator("html").getAttribute("data-theme") !== theme) await page.getByRole("button", { name: `Switch to ${theme} theme` }).click();
         await expect(page.locator("html")).toHaveAttribute("data-theme", theme);

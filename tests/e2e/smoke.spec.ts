@@ -31,4 +31,11 @@ test("mobile landing keeps the primary actions visible", async ({ page }) => {
   await expect(page.getByRole("link", { name: "Get started", exact: true }).first()).toBeInViewport();
   await expect(page.getByRole("button", { name: /theme/i })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+
+  for (const width of [320, 390, 768]) {
+    await page.setViewportSize({ width, height: 844 });
+    const artwork = await page.locator(".home-hero-art").boundingBox();
+    expect(artwork).not.toBeNull();
+    expect(Math.abs(artwork!.width - artwork!.height)).toBeLessThan(1);
+  }
 });

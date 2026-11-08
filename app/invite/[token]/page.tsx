@@ -5,6 +5,8 @@ import { WalletProviders } from "@/src/features/wallet/wallet-providers";
 import { getInviteWalletRequirements } from "@/src/features/wallet/invite-wallet-requirements";
 import { getSession } from "@/src/lib/session";
 import { getTesterIdentityLabel } from "@/src/lib/tester-identity";
+import { AppBanner, AppIcon } from "@/src/features/project-media/app-media";
+import { getProjectMedia } from "@/src/features/project-media/queries";
 
 export default async function InvitePage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
@@ -19,23 +21,22 @@ export default async function InvitePage({ params }: { params: Promise<{ token: 
     : invite.project.releases.map((release) => release.accessPolicy));
   const tester = session && !session.user.isAnonymous ? await getTesterIdentity(session.user.id) : null;
   const currentIdentity = tester ? getTesterIdentityLabel(tester) : null;
+  const media = await getProjectMedia(invite.project.id);
 
   return (
     <main className="relative min-h-screen overflow-hidden px-5 py-10">
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(93,135,255,0.18),transparent_30%),radial-gradient(circle_at_80%_10%,rgba(77,187,148,0.12),transparent_24%)]" />
-      <div className="absolute inset-0 bg-gradient-to-b from-background via-background to-muted/70" />
-      <div className="relative mx-auto grid max-w-5xl items-center gap-8 lg:grid-cols-[0.9fr_1.1fr] lg:gap-10">
-        <div className="order-2 space-y-5 lg:order-1">
-          <div className="section-eyebrow">Private invite</div>
-          <h1 className="text-5xl font-semibold tracking-tight text-foreground">{invite.project.name}</h1>
-          <p className="max-w-xl text-lg leading-8 text-muted-foreground">You were invited to test a private Android build. Claim access, download the APK, and send feedback to the builder.</p>
-          <div className="grid gap-2 text-sm text-muted-foreground">
-            <div>Release scope: {invite.release?.versionName ?? "Project-wide"}</div>
-            <div>Expires: {invite.expiresAt ? invite.expiresAt.toLocaleString() : "Never"}</div>
-          </div>
+      <div className="absolute inset-0 bg-gradient-to-b from-brand/10 via-background to-background" />
+      <div className="relative mx-auto grid max-w-4xl items-center gap-8 lg:grid-cols-2">
+        <div className="min-w-0 space-y-4">
+          <AppBanner media={media} className="aspect-[3/1]" />
+          <div className="section-eyebrow">You&apos;re invited to test</div>
+          <div className="flex min-w-0 items-center gap-4"><AppIcon media={media} name={invite.project.name} /><h1 className="min-w-0 break-words text-4xl font-semibold tracking-tight text-foreground">{invite.project.name}</h1></div>
+          <p className="max-w-xl text-base leading-7 text-muted-foreground">{invite.project.description || "A private Android beta, shared with you by its builder."}</p>
+          <p className="text-sm text-muted-foreground">Open the beta, download the APK, then share your feedback.</p>
+          <details className="text-sm text-muted-foreground"><summary className="cursor-pointer font-semibold">Invitation details</summary><p className="mt-2">{invite.release?.versionName ? `Version ${invite.release.versionName}` : "Project invitation"} · {invite.expiresAt ? `Expires ${invite.expiresAt.toLocaleString()}` : "No expiry"}</p></details>
         </div>
-        <div className="order-1 lg:order-2">
-          <WalletProviders><InviteClaimCard token={token} projectName={invite.project.name} releaseVersion={invite.release?.versionName ?? null} currentIdentity={currentIdentity} {...requirements} /></WalletProviders>
+        <div className="min-w-0">
+          <WalletProviders><InviteClaimCard token={token} projectName={invite.project.name} releaseVersion={invite.release?.versionName ?? null} currentIdentity={currentIdentity} combinedSeekerCheck={requirements.seekerRequired && (!invite.release || invite.release.status === "PUBLISHED")} {...requirements} /></WalletProviders>
         </div>
       </div>
     </main>

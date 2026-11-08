@@ -2,6 +2,14 @@
 
 SeekerHub is a web-first private Android beta distribution service for Solana Mobile builders. Builders upload signed APKs to private object storage, publish policy-gated releases, invite testers, and collect release-specific feedback. It is not an app store and it does not claim to cryptographically certify APK signatures.
 
+## Redesign Checkpoint (2026-11-08)
+
+- Chosen visual direction: light blue surfaces, black accents and a desktop sidebar. Mobile tester navigation is **My apps / Feedback / Account**, with tester-visible feedback history.
+- Private app icons, banners and screenshots are normalized to WebP, with bounded inputs/outputs, an 8 MiB per-project cap and shared builder-quota accounting. See the [media feature README](src/features/project-media/README.md) for exact limits, authorization and cleanup behavior.
+- SGT-required invitation/release contexts can opt into explicit `SIGN_IN_AND_VERIFY_SGT`: one signature authorizes both login and a fresh server-side SGT check. RPC failure retains login without granting or refreshing SGT verification. Existing `SIGN_IN` is unchanged; already-linked wallets keep an explicit separate SGT action. Neither flow is hardware attestation.
+- Current local validation: **355 unit tests across 45 files; 80 integration tests across 12 files; 20/20 E2E tests; lint, typecheck, production build and isolated artifact check pass**. Desktop/mobile visual evidence and the reviewed boundaries are recorded in [design-qa.md](design-qa.md).
+- **Release authorized on 2026-11-08.** Additive migration `20261108000000_project_media` has been applied to Neon after backup/restore validation. The application rollout from `main` is in progress; see the readiness checkpoint for verified deployment status.
+
 ## Stack
 
 - Next.js 16 App Router, React 19, TypeScript, Tailwind CSS 4
@@ -104,6 +112,8 @@ The signature-marker check is not a replacement for Android `apksigner verify`. 
 
 Production uses `prisma migrate deploy`; do not use `db push` against Neon.
 
+The 2026-11-08 redesign is **not** a migration-free release. Validate `20261108000000_project_media` on a backup/test branch, obtain explicit approval for the production migration, and apply it before the separately approved application rollout. No production migration or deployment has been performed for this redesign.
+
 For a new database:
 
 ```bash
@@ -115,7 +125,7 @@ For a legacy database that predates Prisma migrations, and only if the baseline 
 1. Create a Neon backup branch.
 2. Point the CLI at that branch and test the sequence there.
 3. Confirm the existing schema matches the baseline, then mark that baseline as already applied.
-4. Deploy the additive hardening migration.
+4. Deploy the pending additive migrations, including `20261108000000_project_media` for this redesign.
 
 ```bash
 npx prisma migrate resolve --applied 20260731000000_baseline
@@ -133,8 +143,8 @@ Only run those two commands against production after explicit approval and after
 - Link expiration/revocation blocks new claims **and new seat grants** to pending claims. Already granted places are not invalidated by closing a link. `TesterAccess` keeps project-level revocation effective across every future invite link; reactivation allows a new claim but never restores an old seat automatically.
 - Metadata visibility, APK download, and feedback permission are evaluated separately with typed reason codes.
 - Device/browser detection is advisory only. It can never provide Seeker access.
-- A Seeker gate requires a fresh wallet signature and a server-side positive-balance Token-2022 SGT check. Verification expires after 24 hours.
-- Wallet access has one connection entry point: standard MWA on Android Chrome, Wallet Standard selection on desktop. The device may open its default wallet directly; the website does not enumerate installed Android wallet apps. Connecting does not sign in: the tester explicitly continues with a signature, and SGT verification remains a separate server-side check regardless of the wallet app.
+- A Seeker gate requires an explicit fresh wallet proof and a server-side positive-balance Token-2022 SGT check. Successful ownership checks are cached for 24 hours, then need a refresh; this does not mean the token expires or attest the current device's hardware.
+- Wallet access has one connection entry point: standard MWA on Android Chrome, Wallet Standard selection on desktop. The device may open its default wallet directly; the website does not enumerate installed Android wallet apps. Connecting does not sign in. Ordinary `SIGN_IN` is unchanged. Only a server-validated SGT-required invitation/release context enables opt-in `SIGN_IN_AND_VERIFY_SGT`, whose signed message authorizes both actions. Login completes before the fresh SGT check; RPC failure retains login without granting or extending SGT verification. No old signature is reused and no second prompt is automatic. Already-linked wallets can explicitly request a separate `VERIFY_SGT` check.
 - Seeker Connect 0.2 uses the official web SDK but remains disabled by default after a physical-device report of its HTTPS App Link opening the website instead of the wallet. Opt-in registration exposes it only through the standard picker, not a separate CTA. Cancellation is normal; dropped requests are never retried automatically. Selecting an adapter is not hardware attestation or an SGT proof.
 - `.skr` display names use `@solana-mobile/skr-domain` and the wallet's primary name only. The SDK rechecks ownership/expiry; no primary name means a short-address fallback. The authenticated resolver only handles wallets linked to the caller, with bounded requests, rate limits and a per-instance cache (one hour positive, five minutes negative). Names never authorize access or merge accounts, and RPC failures do not block sign-in/downloads.
 - Analytics separate identified accounts from guest browser identities. Recovery deduplicates transferred history by account; an abandoned anonymous session cannot be attributed to a person without a recovery proof. Download links issued count repeated requests, not confirmed installs.
@@ -163,11 +173,15 @@ npm run test:artifact
 
 Integration tests require a disposable PostgreSQL database whose name contains `test`, local S3-compatible storage, and `RUN_INTEGRATION_TESTS=true`. The GitHub Actions workflow provisions PostgreSQL 16 and MinIO, applies every migration from a blank database, and runs the complete suite against the production build. It never uses the production Neon or R2 connections. The artifact check copies only the finalize route's traced files into a temporary directory and executes its APK workers without access to the checkout's dependencies.
 
-For isolated local review, `scripts/with-review-env.mjs` replaces service credentials before running a Node entrypoint. It expects a disposable PostgreSQL database `seekerhub_review_test` on port 55432 and MinIO on 59000; its credentials are test-only. The app/E2E base URL is `http://127.0.0.1:3100`. Never point the suite at production. Example: `node scripts/with-review-env.mjs node_modules/vitest/vitest.mjs run --config vitest.integration.config.mts`. Authenticated browser tests seed verified test accounts locally; they do not establish real email deliverability or physical Android/MWA compatibility.
+For isolated local review, `scripts/with-review-env.mjs` replaces service credentials before running a Node entrypoint. It uses the disposable PostgreSQL database `seekerhub_redesign_test` at `127.0.0.1:5437`, MinIO at `http://127.0.0.1:9007`, and the private bucket `seekerhub-redesign-test`; its credentials are test-only. The app/E2E base URL is `http://127.0.0.1:3100`. Never point the suite at production. Example: `node scripts/with-review-env.mjs node_modules/vitest/vitest.mjs run --config vitest.integration.config.mts`. Authenticated browser tests seed verified test accounts locally; they do not establish real email deliverability or physical Android/MWA compatibility.
+
+Current E2E handoff: tool policy blocked starting the local production-mode server (`next start`). A helper has been prepared for the user to start it before the final post-fix rerun. The build/artifact results above do not imply a complete E2E pass or a production deployment.
 
 The remaining native `bigint` binding warning comes from a Solana transitive dependency; the package falls back to its JavaScript implementation. Production audit exceptions and mitigations are tracked in `SECURITY.md`. Review them before each public deployment rather than accepting breaking downgrades proposed by `npm audit fix --force`.
 
 ## V2
+
+Private app media and tester-visible feedback history are delivered in the 2026-11-08 redesign, not V2 backlog.
 
 - Dedicated mobile companion for richer native Seeker context
 - Android `apksigner` verification service and signer certificate history

@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/src/lib/auth";
 import { prisma } from "@/src/lib/db";
 import { buildWalletChallengeMessage } from "@/src/lib/solana/wallet";
-import { walletChallengeSchema } from "@/src/lib/validation";
+import { contextualWalletChallengeSchema, resolveWalletSgtContext } from "@/src/lib/solana/wallet-sgt-context";
 import { consumeRateLimit, RATE_LIMITS } from "@/src/lib/rate-limit";
 import { apiError, AppError } from "@/src/lib/errors";
 import { getServerEnv } from "@/src/lib/env";
@@ -12,8 +12,8 @@ export async function POST(request: Request) {
   try {
     const session = await auth.api.getSession({ headers: request.headers });
 
-    const body = walletChallengeSchema.parse(await request.json());
-    if (!session && body.purpose !== "SIGN_IN") {
+    const body = contextualWalletChallengeSchema.parse(await request.json());
+    if (!session && body.purpose !== "SIGN_IN" && body.purpose !== "SIGN_IN_AND_VERIFY_SGT") {
       throw new AppError("Authentication required.", 401, "AUTH_REQUIRED");
     }
     await consumeRateLimit({
@@ -22,6 +22,7 @@ export async function POST(request: Request) {
       ...RATE_LIMITS.wallet,
       userId: session?.user.id,
     });
+    const sgtContext = body.sgtContext ? await resolveWalletSgtContext(body.sgtContext) : undefined;
     const nonce = randomUUID();
     const expiresAt = new Date(Date.now() + 1000 * 60 * 10);
     const message = buildWalletChallengeMessage({
@@ -30,6 +31,7 @@ export async function POST(request: Request) {
       appUrl: getServerEnv().BETTER_AUTH_URL,
       purpose: body.purpose,
       expiresAt,
+      sgtContext,
     });
 
     const challenge = await prisma.walletChallenge.create({

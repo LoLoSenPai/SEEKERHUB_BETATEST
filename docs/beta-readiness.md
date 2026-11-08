@@ -1,6 +1,16 @@
 # Beta readiness checkpoint
 
-## Wallet recovery and mobile follow-up (2026-10-31)
+## Redesign checkpoint (2026-11-08)
+
+- Chosen UI: light blue surfaces with black accents and a desktop sidebar. Mobile tester navigation is **My apps / Feedback / Account**; Feedback includes the tester's submitted-report history, subject to current metadata access.
+- App icons, banners and screenshots use private, authorized short-lived URLs and normalized WebP, with capped inputs/outputs, an 8 MiB project cap and shared builder-quota accounting. Exact limits and lifecycle guarantees are in the [media feature README](../src/features/project-media/README.md). Additive migration: `20261108000000_project_media`.
+- Explicit opt-in `SIGN_IN_AND_VERIFY_SGT` is issued only for a server-validated SGT-required invitation/release context bound into the message. One signature authorizes login and a fresh SGT ownership check. Login is retained after RPC failure without granting or refreshing SGT verification. Ordinary `SIGN_IN` is unchanged; already-linked wallets retain the explicit separate verification action. No silent signature reuse, automatic second prompt or hardware attestation is claimed. Successful checks remain valid for 24 hours; a stale cached check needs a refresh, not a replacement token.
+- Local validation: **355 unit tests across 45 files; 80 integration tests across 12 files; 20/20 E2E tests; lint, typecheck, production build and isolated artifact check pass**. The final complete browser suite passed in 49.9 seconds against the production-mode local build. Screenshots preserve caret styles; media controls remain disabled until hydration; contrast scans wait for fonts and the opacity reveal. Repeated wallet/guest scenarios use a stable isolated client IP per test, without disabling or clearing application rate limits. Historical counts below are not the redesign's final validation.
+- The user started the local `next start` server after the tool could not start it. Review services are PostgreSQL `127.0.0.1:5437/seekerhub_redesign_test`, MinIO `http://127.0.0.1:9007`, private bucket `seekerhub-redesign-test`, and app `http://127.0.0.1:3100` (see `scripts/with-review-env.mjs`). The server remains available for review. Visual comparison and evidence are in [design-qa.md](../design-qa.md); mobile navigation, download priority, themes, feedback history and private app media were verified locally. This is not a production rollout.
+- **Production release explicitly authorized on 2026-11-08.** A full private PostgreSQL backup was restored into an isolated PostgreSQL 17 instance and the additive migration tested against the restored data. No Neon management API credential was available, so this verified backup/restore replaced a Neon branch rehearsal. Migration `20261108000000_project_media` is now applied to production Neon; counts remain 14 users, 7 projects and 12 releases. The application rollout from `main` is in progress, not yet a verified deployment.
+- Backup and its SHA-256 record are stored locally in ignored `output/production-backup-20261108/`; this contains private data and must not be published. Production environment material remains ignored. Once media exists, an application rollback must retain media-aware cleanup or pause and review those deletion tasks; the older cleanup implementation does not support them.
+
+## Historical wallet recovery and mobile follow-up (2026-10-31)
 
 - Wallet continuation now creates or recovers one durable tester account. Current guest activity is merged transactionally, including duplicate claims, memberships and analytics; revocations survive the merge. Existing durable accounts are never silently merged or switched. Legacy wallet-linked guests can recover their original account.
 - Wallet-gated invitations authenticate before claiming; ordinary invitations keep the guest option. Reopening a link while signed in reuses the current account. A connection alone never signs a message or grants SGT access.
@@ -10,15 +20,15 @@
 - Primary `.skr` names use the official 1.1.1 SDK, server-side ownership/expiry checks, bounded caches and caller-wallet authorization. Client lookups are coalesced per account/address. Missing names or RPC failures fall back to the address without blocking authentication or downloads.
 - Create, save, upload, publish and authentication controls preserve their values and stay locked through successful navigation. Failed operations allow explicit retry; upload retries reuse the saved session.
 - Analytics separate email/wallet accounts from guest browser identities, deduplicate merged history and distinguish places used, unique downloaders and download links issued. Detailed definitions are collapsed by default. No device fingerprinting was introduced.
-- PostgreSQL concurrency tests cover account recovery, preservation of concurrent revocations and atomic rate-limit increments. No schema migration, production database write, real-wallet signature or production storage write was needed for validation.
+- PostgreSQL concurrency tests cover account recovery, preservation of concurrent revocations and atomic rate-limit increments. That October wallet-only change required no new schema migration, production database write, real-wallet signature or production storage write for validation; the November redesign does require the media migration above.
 
 Validation after the mobile follow-up: ESLint/typecheck and production build pass; 252 unit tests across 29 files, 73 PostgreSQL/MinIO integration tests across 10 files, and 19 browser tests pass. The isolated APK-worker artifact gate passes. Dependency audit remains at zero critical, four documented high exceptions and fourteen moderate findings.
 
 Browser wallet fixtures sign real authentication challenges with disposable test keys and exercise actual session cookies/backend authorization. The 390px Android journey uses a mock MWA-named Wallet Standard wallet: one connect button, no redundant picker, disconnect/reconnect without implicit signing, explicit sign-in, then SGT still blocked. This validates application routing, not native App Links, the real relay, Seed Vault prompts or physical Seeker behavior. SGT gating tests use controlled fixtures, not a live SGT wallet. A physical-device sign-in, verification, sign-out and recovery check remains required before claiming that boundary validated.
 
-Pre-deployment checkpoint following the 2026-10-31 audit. At the end of implementation, changes were validated locally on `main`; no production migration, email send, R2 write or deployment was used for that validation. The user subsequently authorized a production release from `main`.
+Historical pre-deployment checkpoint following the 2026-10-31 audit: changes were validated locally on `main`; no production migration, email send, R2 write or deployment was used for that validation. The user subsequently authorized that earlier production release from `main`, not the 2026-11-08 redesign.
 
-## Delivered
+## Historical delivered baseline
 
 - Clear public builder/tester choices, recovery guidance and preserved return destinations.
 - Upload -> checked private draft -> release notes -> audience -> review -> explicit publication and share link. Publication retries reuse the original invitation, including app-wide invitations.
@@ -30,7 +40,7 @@ Pre-deployment checkpoint following the 2026-10-31 audit. At the end of implemen
 - Allowlist discovery, invite expiry/revocation before seat grant, physical-byte quotas and cleanup/admin purge accounting are covered by regression tests.
 - Cleanup runs every ten minutes with bounded work, fenced leases, retries and backlog logs. Framework/auth dependencies and the dependency audit gate were updated.
 
-## Local validation
+## Historical local validation (before redesign)
 
 All service credentials were overridden with disposable local PostgreSQL/MinIO configuration. No tests targeted the production deployment.
 
@@ -50,9 +60,9 @@ The synthetic fixture is not an installable, cryptographically signed Android ap
 
 ## Before public promotion
 
-1. Review and approve the local changes, then deploy from `main` with the existing production environment. This change set does not require a Prisma schema migration. Let Vercel build with production public URLs; do not reuse the local review `.next` artifact.
+1. Complete and verify the authorized production rollout from `main`; the backup/restore rehearsal and Neon migration are complete. Keep private-media cleanup enabled. Let Vercel build with production public URLs; do not reuse the local review `.next` artifact.
 2. Check a real signed 450-500 MiB APK on R2/Vercel, with an appropriate per-APK and total quota. Finalization temporarily reserves twice the APK size until staging cleanup; default public quotas were not raised.
-3. Validate MWA and a real SGT wallet on physical Android/Seeker, including an ineligible tester, expired verification and recovery on a second device. Desktop mobile emulation is not device proof.
+3. Validate MWA and a real SGT wallet on physical Android/Seeker, including an ineligible tester, a cached SGT check needing refresh, combined consent, RPC failure and recovery on a second device. Desktop mobile emulation is not device proof.
 4. Check real Resend verification/magic-link delivery, sender configuration and recovery behavior. Local auth tests use seeded verified accounts, not delivered emails.
 5. Review privacy/terms and the monitored abuse contact. These pages remain explicitly legal drafts, not approved legal advice.
 6. Observe the deployed cleanup schedule, backlog and quota settlement; configure an operator alert for exhausted deletion tasks before increasing traffic.
@@ -61,6 +71,6 @@ Start with a small invited pilot after these checks, not a claim that every prod
 
 ## Follow-up improvements
 
-Optional QR sharing, tester-visible feedback history, builder feedback status/replies, richer app branding/social previews, resumable large-file transfers, and full Android signature verification remain follow-up work. Unsubmitted notes/audience edits are not autosaved; the uploaded APK draft is saved and the UI states this distinction.
+Private app icons/banners/screenshots and tester-visible feedback history are delivered in the 2026-11-08 redesign, not V2 backlog. Optional QR sharing, builder feedback status/replies, social preview metadata, resumable large-file transfers, and full Android signature verification remain follow-up work. Unsubmitted notes/audience edits are not autosaved; the uploaded APK draft is saved and the UI states this distinction.
 
-Local test services were stopped after validation. A temporary packaging QA clone remains at `E:\CODE\PERSO\APK_PACKAGING_QA` because tool-level deletion was blocked; it is not required by the app and contains junctions to the original dependencies. Do not recursively follow those junctions when cleaning it up.
+Historical operations note from the October checkpoint: local test services were stopped after that validation, and a temporary packaging QA clone was left at `E:\CODE\PERSO\APK_PACKAGING_QA` because tool-level deletion was blocked. This is not a current service/clone inventory. The clone is not required by the app and contains junctions to the original dependencies; do not recursively follow those junctions when cleaning it up.

@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
 import { expect, test, type BrowserContext, type Page } from "@playwright/test";
@@ -36,8 +36,16 @@ function reviewEnvironment() {
 
 const walletName = "Review Journey Wallet";
 const connectWalletLabel = /^(Connect wallet|Use installed wallet)$/;
+const combinedSignInLabel = "Continue with wallet + check SGT";
 // A deliberately untrusted UA hint, not a Seeker Connect wallet or an SGT proof.
 const hintedUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36 Seeker";
+
+function isolatedReviewHeaders() {
+  // One stable client IP per loopback-only test, not a fresh identity per request.
+  // Repeated suites must not share the entire machine's invitation/auth buckets.
+  const octets = randomBytes(2);
+  return { "x-forwarded-for": `198.18.${octets[0]}.${octets[1]}` };
+}
 
 async function installWallet(context: BrowserContext, keypair: nacl.SignKeyPair, name = walletName) {
   const signedMessages: Uint8Array[] = [];
@@ -119,7 +127,7 @@ async function connectWallet(page: Page) {
   await page.getByRole("button", { name: connectWalletLabel }).click();
   // The installed adapter adds an icon alt text and a "Detected" badge.
   await page.getByRole("button", { name: new RegExp(walletName) }).click();
-  await expect(page.getByRole("button", { name: "Continue with wallet", exact: true })).toBeEnabled();
+  await expect(page.getByRole("button", { name: combinedSignInLabel, exact: true })).toBeEnabled();
 }
 
 async function sessionUser(context: BrowserContext, baseUrl: string) {
@@ -130,23 +138,34 @@ async function sessionUser(context: BrowserContext, baseUrl: string) {
 }
 
 async function continueWithWallet(page: Page) {
+  const invitePath = new URL(page.url()).pathname;
+  const claimed = page.waitForResponse((response) =>
+    new URL(response.url()).pathname === `/api${invitePath.replace("/invite/", "/invites/")}/claim` &&
+    response.request().method() === "POST").catch(() => null);
   const signedIn = page.waitForResponse((response) =>
     new URL(response.url()).pathname === "/api/auth/sign-in/solana-wallet" && response.request().method() === "POST");
-  await page.getByRole("button", { name: "Continue with wallet", exact: true }).click();
+  await page.getByRole("button", { name: combinedSignInLabel, exact: true }).click();
   const response = await signedIn;
   expect(response.status()).toBe(200);
   const result = await response.json();
   expect(result.success).toBe(true);
+  // Real local backend response: an unavailable chain check must not undo authentication.
+  expect(result.sgt).toMatchObject({ status: "unavailable", verified: false, code: "SGT_RPC_UNAVAILABLE",
+    mintAddress: null, expiresAt: null });
+  const claim = await claimed;
+  expect(claim, "Explicit sign-in must be followed by an invitation claim").not.toBeNull();
+  expect(claim!.status(), `Invitation claim after successful authentication: ${await claim!.text()}`).toBe(200);
   return result.user as { id: string; isAnonymous: boolean };
 }
 
-test("explicit wallet sign-in gates SGT access and recovers one tester account across browsers", async ({ browser }, testInfo) => {
+test("one explicit combined signature retains login on RPC outage and recovers one tester across browsers", async ({ browser }, testInfo) => {
   test.setTimeout(120_000);
   const { databaseUrl, baseUrl, bucket } = reviewEnvironment();
   const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
   const keypair = nacl.sign.keyPair();
   const address = bs58.encode(keypair.publicKey);
   const id = randomUUID();
+  const clientHeaders = isolatedReviewHeaders();
   const token = `wallet-journey-${id}`;
   const contexts: BrowserContext[] = [];
   const pageErrors: string[] = [];
@@ -174,7 +193,7 @@ test("explicit wallet sign-in gates SGT access and recovers one tester account a
     const testerUrl = `${baseUrl}/tester/releases/${release.id}`;
 
     async function newWalletBrowser() {
-      const context = await browser.newContext({ userAgent: hintedUserAgent, viewport: { width: 390, height: 844 } });
+      const context = await browser.newContext({ userAgent: hintedUserAgent, viewport: { width: 390, height: 844 }, extraHTTPHeaders: clientHeaders });
       contexts.push(context);
       context.on("page", (page) => page.on("pageerror", (error) => pageErrors.push(error.message)));
       const mock = await installWallet(context, keypair);
@@ -224,8 +243,12 @@ test("explicit wallet sign-in gates SGT access and recovers one tester account a
     expect(blocked.status()).toBe(403);
     expect(await prisma.downloadEvent.count({ where: { releaseId: release.id } })).toBe(0);
     const firstChallenge = await prisma.walletChallenge.findFirstOrThrow({ where: { address } });
-    expect(firstChallenge.purpose).toBe("SIGN_IN");
+    expect(firstChallenge.purpose).toBe("SIGN_IN_AND_VERIFY_SGT");
     expect(firstChallenge.usedAt).not.toBeNull();
+    expect(firstChallenge.message).toContain("Sign in to SeekerHub and authorize a fresh on-chain Seeker Genesis Token ownership check for this wallet");
+    expect(firstChallenge.message).toContain(`SGT access context: invite:${invite.id};release:${release.id}`);
+    expect(firstChallenge.message).not.toContain(token);
+    expect(firstChallenge.message).toContain("does not prove that the current device is a Seeker");
     expect(first.mock.signedMessages).toHaveLength(1);
     expect(Buffer.from(first.mock.signedMessages[0]).toString("utf8")).toBe(firstChallenge.message);
     await first.page.screenshot({ path: testInfo.outputPath("wallet-sgt-pending-390.png"), fullPage: true });
@@ -236,6 +259,7 @@ test("explicit wallet sign-in gates SGT access and recovers one tester account a
         seekerGenesisVerificationExpiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
       } });
     });
+    const cachedFixture = await prisma.wallet.findUniqueOrThrow({ where: { address } });
     // Reopen the invite through the UI: normal reconciliation, not a DB seat grant.
     await first.page.goto(inviteUrl);
     await first.page.getByRole("button", { name: "Open beta access", exact: true }).click();
@@ -257,6 +281,9 @@ test("explicit wallet sign-in gates SGT access and recovers one tester account a
     await second.page.screenshot({ path: testInfo.outputPath("wallet-recovered-390.png"), fullPage: true });
     expect((await sessionUser(second.context, baseUrl)).id).toBe(testerId);
     expect(await prisma.wallet.count({ where: { address } })).toBe(1);
+    const recoveredWallet = await prisma.wallet.findUniqueOrThrow({ where: { address } });
+    expect(recoveredWallet.seekerGenesisVerifiedAt).toEqual(cachedFixture.seekerGenesisVerifiedAt);
+    expect(recoveredWallet.seekerGenesisVerificationExpiresAt).toEqual(cachedFixture.seekerGenesisVerificationExpiresAt);
     expect(await prisma.user.findUniqueOrThrow({ where: { id: testerId } })).toMatchObject({ isAnonymous: false });
     expect(await prisma.builderProfile.findUnique({ where: { userId: testerId } })).toBeNull();
     expect(await prisma.testerAccess.count({ where: { projectId } })).toBe(1);
@@ -270,7 +297,7 @@ test("explicit wallet sign-in gates SGT access and recovers one tester account a
     for (const mock of [first.mock, second.mock]) {
       const challenges = mock.requests.filter(({ path }) => path === "/api/wallet/challenge");
       expect(challenges).toHaveLength(mock.signedMessages.length);
-      for (const { body } of challenges) expect(body).toEqual({ address, purpose: "SIGN_IN" });
+      for (const { body } of challenges) expect(body).toEqual({ address, purpose: "SIGN_IN_AND_VERIFY_SGT", sgtContext: { inviteToken: token } });
       expect(mock.requests.filter(({ path }) => path === "/api/auth/sign-in/solana-wallet"))
         .toHaveLength(mock.signedMessages.length);
       expect(mock.requests.map(({ path }) => path)).not.toContain("/api/auth/sign-in/anonymous");
@@ -278,7 +305,7 @@ test("explicit wallet sign-in gates SGT access and recovers one tester account a
     }
     expect(first.mock.signedMessages).toHaveLength(1);
     expect(second.mock.signedMessages).toHaveLength(1);
-    expect(await prisma.walletChallenge.count({ where: { address, purpose: "SIGN_IN", usedAt: { not: null } } })).toBe(2);
+    expect(await prisma.walletChallenge.count({ where: { address, purpose: "SIGN_IN_AND_VERIFY_SGT", usedAt: { not: null } } })).toBe(2);
   } finally {
     await testInfo.attach("wallet-page-errors", { body: JSON.stringify(pageErrors, null, 2), contentType: "application/json" });
     await Promise.all(contexts.map((context) => context.close()));
@@ -286,7 +313,8 @@ test("explicit wallet sign-in gates SGT access and recovers one tester account a
       // Targeted cleanup only for this test's random fixture IDs and wallet.
       if (projectId) await prisma.appProject.deleteMany({ where: { id: projectId } });
       await prisma.walletChallenge.deleteMany({ where: { address } });
-      if (testerId) await prisma.user.deleteMany({ where: { id: testerId } });
+      const walletUserId = testerId ?? (await prisma.wallet.findUnique({ where: { address }, select: { userId: true } }))?.userId;
+      if (walletUserId) await prisma.user.deleteMany({ where: { id: walletUserId } });
       if (ownerId) await prisma.user.deleteMany({ where: { id: ownerId } });
     } finally {
       await prisma.$disconnect();
@@ -295,16 +323,17 @@ test("explicit wallet sign-in gates SGT access and recovers one tester account a
   }
 });
 
-test("Android has one wallet entry point, explicit signing, and separate SGT proof", async ({ browser }, testInfo) => {
+test("Android combines sign-in explicitly and keeps linked-wallet SGT verification a separate action", async ({ browser }, testInfo) => {
   test.setTimeout(90_000);
   const { databaseUrl, baseUrl, bucket } = reviewEnvironment();
   const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
   const keypair = nacl.sign.keyPair();
   const address = bs58.encode(keypair.publicKey);
   const id = randomUUID();
+  const clientHeaders = isolatedReviewHeaders();
   const token = `android-selector-${id}`;
   const pageErrors: string[] = [];
-  const context = await browser.newContext({ viewport: { width: 390, height: 844 },
+  const context = await browser.newContext({ viewport: { width: 390, height: 844 }, extraHTTPHeaders: clientHeaders,
     userAgent: "Mozilla/5.0 (Linux; Android 15; Seeker) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36" });
   let ownerId: string | undefined;
   let projectId: string | undefined;
@@ -351,7 +380,8 @@ test("Android has one wallet entry point, explicit signing, and separate SGT pro
     await noOverflow();
     await page.getByRole("button", { name: "Connect wallet", exact: true }).click();
     await expect(page.getByRole("button", { name: "Disconnect wallet", exact: true })).toBeEnabled();
-    await expect(page.getByRole("button", { name: "Continue with wallet", exact: true })).toBeEnabled();
+    await expect(page.getByRole("button", { name: combinedSignInLabel, exact: true })).toBeEnabled();
+    await expect(page.getByText("One signature authorizes both", { exact: false })).toBeVisible();
     await noImplicitAuth();
     await noOverflow();
     await expect(page.locator(".wallet-adapter-modal")).toHaveCount(0);
@@ -360,10 +390,10 @@ test("Android has one wallet entry point, explicit signing, and separate SGT pro
     // Disconnect/reconnect stays on the site and never signs a message implicitly.
     await page.getByRole("button", { name: "Disconnect wallet", exact: true }).click();
     await expect(page.getByRole("button", { name: "Connect wallet", exact: true })).toBeEnabled();
-    await expect(page.getByRole("button", { name: "Continue with wallet", exact: true })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: combinedSignInLabel, exact: true })).toHaveCount(0);
     await noImplicitAuth();
     await page.getByRole("button", { name: "Connect wallet", exact: true }).click();
-    await expect(page.getByRole("button", { name: "Continue with wallet", exact: true })).toBeEnabled();
+    await expect(page.getByRole("button", { name: combinedSignInLabel, exact: true })).toBeEnabled();
     await expect(page).toHaveURL(`${baseUrl}/invite/${token}`);
     await noImplicitAuth();
 
@@ -384,20 +414,59 @@ test("Android has one wallet entry point, explicit signing, and separate SGT pro
     // Display-name reads after authentication are not proof requests.
     expect(mobile.requests.filter(({ path }) => path !== "/api/wallet/domain").map(({ path }) => path))
       .toEqual(["/api/wallet/challenge", "/api/auth/sign-in/solana-wallet"]);
-    expect(mobile.requests[0].body).toEqual({ address, purpose: "SIGN_IN" });
-    await expect(page.getByRole("button", { name: "Verify Seeker Genesis Token", exact: true })).toBeVisible();
+    expect(mobile.requests[0].body).toEqual({ address, purpose: "SIGN_IN_AND_VERIFY_SGT", sgtContext: { inviteToken: token } });
+    expect(mobile.requests.find(({ path }) => path === "/api/auth/sign-in/solana-wallet")?.body)
+      .toMatchObject({ address, purpose: "SIGN_IN_AND_VERIFY_SGT" });
+    const combinedChallenge = await prisma.walletChallenge.findFirstOrThrow({ where: { address, purpose: "SIGN_IN_AND_VERIFY_SGT" } });
+    expect(combinedChallenge.usedAt).not.toBeNull();
+    expect(Buffer.from(mobile.signedMessages[0]).toString("utf8")).toBe(combinedChallenge.message);
+    expect(combinedChallenge.message).toContain(`SGT access context: invite:${invite.id};release:${release.id}`);
+    await expect(page.getByRole("button", { name: "Verify Seeker Genesis Token", exact: true })).toBeEnabled();
     await expect(page.getByRole("button", { name: "Continue with wallet", exact: true })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: combinedSignInLabel, exact: true })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Choose another wallet", exact: true })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Use Seeker Connect", exact: true })).toHaveCount(0);
     await noOverflow();
     await page.screenshot({ path: testInfo.outputPath("android-signin-not-sgt-390.png"), fullPage: true });
+
+    // No automatic second prompt: a linked wallet explicitly requests its own fresh SGT proof.
+    expect(mobile.signedMessages).toHaveLength(1);
+    expect(mobile.requests.filter(({ path }) => path === "/api/wallet/verify-seeker")).toHaveLength(0);
+    const verified = page.waitForResponse((response) => new URL(response.url()).pathname === "/api/wallet/verify-seeker" &&
+      response.request().method() === "POST");
+    await page.getByRole("button", { name: "Verify Seeker Genesis Token", exact: true }).click();
+    const verificationResponse = await verified;
+    expect(verificationResponse.status()).toBe(503);
+    expect(await verificationResponse.json()).toMatchObject({ code: "SGT_RPC_UNAVAILABLE" });
+    await expect(page.getByRole("alert").filter({ hasText: "temporarily unavailable" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Verify Seeker Genesis Token", exact: true })).toBeEnabled();
+    expect(mobile.signedMessages).toHaveLength(2);
+    const separateChallenge = await prisma.walletChallenge.findFirstOrThrow({ where: { address, purpose: "VERIFY_SGT" } });
+    expect(separateChallenge.id).not.toBe(combinedChallenge.id);
+    expect(separateChallenge.nonce).not.toBe(combinedChallenge.nonce);
+    expect(separateChallenge.usedAt).not.toBeNull();
+    expect(Buffer.from(mobile.signedMessages[1]).toString("utf8")).toBe(separateChallenge.message);
+    expect(separateChallenge.message).toContain("Verify Seeker Genesis Token ownership");
+    expect(mobile.requests.filter(({ path }) => path === "/api/wallet/challenge").map(({ body }) => body)).toEqual([
+      { address, purpose: "SIGN_IN_AND_VERIFY_SGT", sgtContext: { inviteToken: token } }, { address, purpose: "VERIFY_SGT" },
+    ]);
+    expect(mobile.requests.filter(({ path }) => path === "/api/auth/sign-in/solana-wallet")).toHaveLength(1);
+    expect(mobile.requests.filter(({ path }) => path === "/api/wallet/verify-seeker")).toHaveLength(1);
+    expect((await sessionUser(context, baseUrl)).id).toBe(testerId);
+    expect(await prisma.wallet.findUniqueOrThrow({ where: { address } })).toMatchObject({ userId: testerId,
+      seekerGenesisVerifiedAt: null, seekerGenesisVerificationExpiresAt: null });
+    expect(await prisma.inviteClaim.findMany({ where: { inviteLinkId: invite.id } })).toEqual([claim]);
+    expect(await prisma.testerAccess.count({ where: { projectId } })).toBe(1);
+    expect((await context.request.get(`${baseUrl}/api/downloads/${release.id}`, { maxRedirects: 0 })).status()).toBe(403);
+    await noOverflow();
   } finally {
     await testInfo.attach("android-wallet-page-errors", { body: JSON.stringify(pageErrors, null, 2), contentType: "application/json" });
     await context.close();
     try {
       if (projectId) await prisma.appProject.deleteMany({ where: { id: projectId } });
       await prisma.walletChallenge.deleteMany({ where: { address } });
-      if (testerId) await prisma.user.deleteMany({ where: { id: testerId } });
+      const walletUserId = testerId ?? (await prisma.wallet.findUnique({ where: { address }, select: { userId: true } }))?.userId;
+      if (walletUserId) await prisma.user.deleteMany({ where: { id: walletUserId } });
       if (ownerId) await prisma.user.deleteMany({ where: { id: ownerId } });
     } finally {
       await prisma.$disconnect();

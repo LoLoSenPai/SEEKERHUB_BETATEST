@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import Link from "next/link";
+import { useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/src/components/ui/button";
 import { Input } from "@/src/components/ui/input";
@@ -11,6 +12,7 @@ import { useDeviceContext } from "@/src/features/seeker/use-device-context";
 
 export function FeedbackForm({ releaseId }: { releaseId: string }) {
   const [loading, setLoading] = useState(false);
+  const submitting = useRef(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const { context, deviceProfileId, persistDeviceProfile } = useDeviceContext();
 
@@ -19,6 +21,8 @@ export function FeedbackForm({ releaseId }: { releaseId: string }) {
       className="grid gap-4"
       onSubmit={async (event) => {
         event.preventDefault();
+        if (submitting.current) return;
+        submitting.current = true;
         const form = event.currentTarget;
         setLoading(true);
         setMessage(null);
@@ -52,6 +56,7 @@ export function FeedbackForm({ releaseId }: { releaseId: string }) {
           setMessage({ type: "error", text });
           toast.error(text);
         } finally {
+          submitting.current = false;
           setLoading(false);
         }
       }}
@@ -75,6 +80,7 @@ export function FeedbackForm({ releaseId }: { releaseId: string }) {
       </div>
       <p className="text-xs leading-5 text-muted-foreground">Device information detected from your browser, such as operating system, browser, platform and device class, is attached to help the builder investigate. Avoid including passwords or other sensitive information in your report.</p>
       <div aria-live="polite">{message ? <p role={message.type === "error" ? "alert" : "status"} className={message.type === "error" ? "text-sm text-danger" : "text-sm text-foreground"}>{message.text}</p> : null}</div>
+      {message?.type === "success" ? <Link href="/tester/feedback" className="text-sm font-semibold underline">View your feedback</Link> : null}
       <Button type="submit" disabled={loading}>
         {loading ? "Submitting..." : "Submit feedback"}
       </Button>

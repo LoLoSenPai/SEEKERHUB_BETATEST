@@ -15,6 +15,35 @@ function setup() {
 }
 
 describe("unified wallet requests", () => {
+  it("uses one explicit signature for combined sign-in with validated invitation context", async () => {
+    const { fetchMock, signer, signMessage } = setup();
+    const sgtContext = { inviteToken: "invite-token" };
+    await requestWalletAction({ ...signer, purpose: "SIGN_IN_AND_VERIFY_SGT", sgtContext });
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toMatchObject({ purpose: "SIGN_IN_AND_VERIFY_SGT", sgtContext });
+    expect(fetchMock.mock.calls[1][0]).toBe("/api/auth/sign-in/solana-wallet");
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body).purpose).toBe("SIGN_IN_AND_VERIFY_SGT");
+    expect(signMessage).toHaveBeenCalledOnce();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it.each(["unavailable", "not_found", "conflict", "rate_limited"])("preserves authentication on SGT %s without another prompt", async (status) => {
+    const { fetchMock, signer, signMessage } = setup();
+    fetchMock.mockReset()
+      .mockResolvedValueOnce(Response.json({ challengeId: "c", message: "Sign in and check SGT" }))
+      .mockResolvedValueOnce(Response.json({ success: true, sgt: { verified: false, status } }));
+    await expect(requestWalletAction({ ...signer, purpose: "SIGN_IN_AND_VERIFY_SGT", sgtContext: { releaseId: "release" } }))
+      .resolves.toMatchObject({ success: true, sgt: { verified: false, status } });
+    expect(signMessage).toHaveBeenCalledOnce();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not ask for combined proof without policy context", async () => {
+    const { fetchMock, signer, signMessage } = setup();
+    await expect(requestWalletAction({ ...signer, purpose: "SIGN_IN_AND_VERIFY_SGT" })).rejects.toThrow("requiring an SGT check");
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(signMessage).not.toHaveBeenCalled();
+  });
+
   it("uses SIGN_IN and cookie credentials for both new and returning wallets, never LINK", async () => {
     const { fetchMock, signer, signMessage } = setup();
     await requestWalletAction(signer);

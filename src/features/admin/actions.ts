@@ -5,6 +5,7 @@ import { prisma } from "@/src/lib/db";
 import { requireAdminSession } from "@/src/lib/session";
 import { deleteObject } from "@/src/lib/storage/s3";
 import { assertUploadDeletionAllowed, settleUploadReservation, uploadTaskTypes } from "@/src/lib/storage/cleanup-uploads";
+import { assertMediaDeletionAllowed, assertMediaObjectAbsent, settleMediaDeletion } from "@/src/lib/storage/cleanup-media";
 
 export async function setBuilderStatusAction(formData: FormData) {
   const admin = await requireAdminSession();
@@ -57,6 +58,8 @@ export async function purgeStorageTaskAction(formData: FormData) {
       const release = await tx.release.findUnique({ where: { id: candidate.resourceId }, include: { buildAsset: true } });
       if (!release?.deletedAt) throw new Error("Only trashed releases can be purged.");
       if (release.buildAsset && release.buildAsset.storageKey !== candidate.storageKey) throw new Error("Release storage key mismatch.");
+    } else if (candidate.resourceType === "ProjectMedia") {
+      await assertMediaDeletionAllowed(tx, candidate, new Date());
     } else if (uploadTaskTypes.includes(candidate.resourceType)) {
       await assertUploadDeletionAllowed(tx, candidate, new Date());
     } else {
@@ -77,7 +80,9 @@ export async function purgeStorageTaskAction(formData: FormData) {
 
   try {
     if (uploadTaskTypes.includes(task.resourceType)) await assertUploadDeletionAllowed(prisma, task, new Date());
+    if (task.resourceType === "ProjectMedia") await assertMediaDeletionAllowed(prisma, task, new Date());
     await deleteObject(task.storageKey);
+    if (task.resourceType === "ProjectMedia") await assertMediaObjectAbsent(task.storageKey);
     await prisma.$transaction(async (tx) => {
       const completedTask = await tx.storageDeletionTask.updateMany({
         where: lease,
@@ -90,6 +95,8 @@ export async function purgeStorageTaskAction(formData: FormData) {
         if (!release?.deletedAt) throw new Error("Only trashed releases can be purged.");
         if (release.buildAsset) await tx.builderProfile.update({ where: { userId: release.project.ownerId }, data: { usedStorageBytes: { decrement: release.buildAsset.fileSizeBytes } } });
         await tx.release.delete({ where: { id: release.id } });
+      } else if (task.resourceType === "ProjectMedia") {
+        await settleMediaDeletion(tx, task);
       } else if (uploadTaskTypes.includes(task.resourceType)) {
         await settleUploadReservation(tx, task.resourceId);
       }

@@ -71,7 +71,7 @@ export function ReleasePublishForm({ releaseId, version, packageName, groups, in
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Check the release details."); }
   }
 
-  return <form ref={formRef} noValidate className="space-y-6 [&_input]:scroll-mb-28 [&_select]:scroll-mb-28 [&_textarea]:scroll-mb-28 [&_summary]:scroll-mb-28" onSubmit={async (event) => {
+  return <form ref={formRef} noValidate className="space-y-6 [&_input]:scroll-mb-52 [&_select]:scroll-mb-52 [&_textarea]:scroll-mb-52 [&_summary]:scroll-mb-52 lg:[&_input]:scroll-mb-28 lg:[&_select]:scroll-mb-28 lg:[&_textarea]:scroll-mb-28 lg:[&_summary]:scroll-mb-28" onSubmit={async (event) => {
     event.preventDefault();
     if (inFlight.current) return;
     if (step !== 3) { next(); return; }
@@ -126,7 +126,7 @@ export function ReleasePublishForm({ releaseId, version, packageName, groups, in
       <div className="whitespace-pre-wrap break-words text-sm leading-7">{review.changelog}</div>
     </section> : null}
     {error ? <p role="alert" className="rounded-xl border border-danger/30 bg-danger/5 p-4 text-sm text-danger">{error}</p> : null}
-    <div className="sticky bottom-3 z-10 flex flex-wrap justify-between gap-3 rounded-2xl border border-border bg-card p-3 shadow-lg">
+    <div className="sticky bottom-[calc(5rem+env(safe-area-inset-bottom))] z-10 flex flex-wrap justify-between gap-3 rounded-2xl border border-border bg-card p-3 shadow-lg lg:bottom-3">
       {step > 1 ? <Button type="button" variant="secondary" disabled={busy} onClick={() => { setStep(step - 1); setError(""); }}><ArrowLeft className="size-4" />Back</Button> : <span />}
       {step < 3 ? <Button key="continue" type="button" onClick={(event) => { event.preventDefault(); next(); }}>Continue<ArrowRight className="size-4" /></Button> : <Button key="publish" type="submit" disabled={busy}><Send className="size-4" />{busy ? "Publishing..." : review?.accessPolicy.requireInviteAcceptance ? "Publish and create link" : "Publish for allowed wallets"}</Button>}
     </div>

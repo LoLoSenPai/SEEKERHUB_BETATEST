@@ -117,7 +117,7 @@ export function evaluateReleaseAccess(input: EvaluateReleaseAccessInput): Access
       reasons.push({
         code: everVerified ? "SGT_VERIFICATION_EXPIRED" : "SGT_VERIFICATION_REQUIRED",
         message: everVerified
-          ? "Your Seeker verification expired. Verify the linked wallet again."
+          ? "Your cached SGT ownership check needs a refresh. Check the linked wallet again."
           : "Verify Seeker Genesis Token ownership with a linked wallet.",
         blocking: true,
       });

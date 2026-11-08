@@ -7,8 +7,9 @@ import { getServerEnv } from "@/src/lib/env";
 import { transferAnonymousAccountInTransaction } from "@/src/lib/account-linking";
 import { isTransactionConflict, isUniqueConstraintError } from "@/src/lib/prisma-errors";
 import { verifySolanaSignature } from "@/src/lib/solana/wallet";
+import type { WalletAuthPurpose } from "./wallet-types";
 
-type WalletProof = { challengeId: string; address: string; signature: string; currentUserId: string | null };
+type WalletProof = { challengeId: string; address: string; signature: string; currentUserId: string | null; purpose?: WalletAuthPurpose };
 
 export async function continueWalletAccount(input: WalletProof) {
   for (let attempt = 0; ; attempt += 1) {
@@ -17,7 +18,7 @@ export async function continueWalletAccount(input: WalletProof) {
         // Serialize first-time sign-ins for one address, including separate guest sessions.
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`wallet-auth:${input.address}`}, 0))`;
         const challenge = await tx.walletChallenge.findUnique({ where: { id: input.challengeId } });
-        if (!challenge || challenge.address !== input.address || challenge.purpose !== "SIGN_IN") {
+        if (!challenge || challenge.address !== input.address || challenge.purpose !== (input.purpose ?? "SIGN_IN")) {
           throw new AppError("Wallet sign-in challenge not found.", 400, "CHALLENGE_NOT_FOUND");
         }
         if (challenge.userId !== input.currentUserId) {

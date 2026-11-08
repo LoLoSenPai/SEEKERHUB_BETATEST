@@ -1,107 +1,67 @@
 import Link from "next/link";
-import { AppWindow, Boxes, CircleUserRound, Trash2 } from "lucide-react";
-import { Badge } from "@/src/components/ui/badge";
+import { ArrowLeftRight, Grid2X2, MessageSquare, Plus, Square, Trash2, UserRound } from "lucide-react";
+import { AccountMenu } from "@/src/components/layout/account-menu";
 import { cn } from "@/src/lib/utils";
-import { SignOutButton } from "@/src/components/layout/sign-out-button";
-import { ThemeToggle } from "@/src/components/theme/theme-toggle";
-import { WalletName } from "@/src/features/wallet/wallet-name";
 
-type NavItem = {
-  href: string;
-  label: string;
-  icon: React.ComponentType<{ className?: string }>;
-};
-
-const builderItems: NavItem[] = [
-  { href: "/builder", label: "Overview", icon: AppWindow },
-  { href: "/builder/apps/new", label: "New app", icon: Boxes },
+const builderItems = [
+  { href: "/builder", label: "My apps", icon: Grid2X2 },
+  { href: "/builder/feedback", label: "Feedback", icon: MessageSquare },
   { href: "/builder/trash", label: "Trash", icon: Trash2 },
 ];
+const testerItems = [
+  { href: "/tester", label: "My apps", icon: Grid2X2 },
+  { href: "/tester/feedback", label: "Feedback", icon: MessageSquare },
+  { href: "/tester/account", label: "Account", icon: UserRound },
+];
 
-export function DashboardFrame({
-  kind,
-  currentPath,
-  title,
-  subtitle,
-  canBuild = false,
-  isGuest = false,
-  identityLabel = "Signed in",
-  identityWalletAddress,
-  children,
+export function DashboardFrame({ kind, currentPath, title, subtitle, canBuild = false, isGuest = false,
+  identityLabel = "Signed in", identityWalletAddress, projectLinks = [], compactHeader = false, children,
 }: {
-  kind: "builder" | "tester";
-  currentPath: string;
-  title: string;
-  subtitle: string;
-  canBuild?: boolean;
-  isGuest?: boolean;
-  identityLabel?: string;
-  identityWalletAddress?: string;
-  children: React.ReactNode;
+  kind: "builder" | "tester"; currentPath: string; title: string; subtitle: string;
+  canBuild?: boolean; isGuest?: boolean; identityLabel?: string; identityWalletAddress?: string;
+  projectLinks?: Array<{ slug: string; name: string }>; compactHeader?: boolean; children: React.ReactNode;
 }) {
-  const items = builderItems;
-
+  const items = kind === "builder" ? builderItems : testerItems;
+  const active = (href: string) => currentPath === href ||
+    (href === "/builder" && currentPath.startsWith("/builder/apps/")) ||
+    (href === "/tester" && currentPath.startsWith("/tester/releases/")) ||
+    (href === "/tester/account" && currentPath === "/tester/upgrade");
+  const account = <AccountMenu kind={kind} isGuest={isGuest} identityLabel={identityLabel} walletAddress={identityWalletAddress} />;
   return (
-    <div className="min-h-screen bg-gradient-to-b from-background to-muted">
-      <div className="page-shell">
-        <header className="grid min-w-0 gap-3 rounded-[1.75rem] border border-border bg-surface p-4 shadow-sm backdrop-blur lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
-          <div className="min-w-0">
-            <div className="section-eyebrow">{kind === "builder" ? "Builder workspace" : "Tester dashboard"}</div>
-            <h1 className="mt-1 break-words text-2xl font-semibold tracking-tight sm:text-3xl">{title}</h1>
-            <p className="mt-1 text-sm leading-6 text-muted-foreground">{subtitle}</p>
-          </div>
-          <div className="grid min-w-0 gap-3 lg:justify-items-end">
-            <div className="flex flex-wrap items-center gap-2">
-              {kind === "builder" || canBuild ? <div className="flex items-center rounded-full border border-border bg-card p-1">
-                <Link href="/builder" className={cn("rounded-full px-3 py-1.5 text-xs font-semibold", kind === "builder" && "bg-primary text-primary-foreground")}>Builder workspace</Link>
-                <Link href="/tester" className={cn("rounded-full px-3 py-1.5 text-xs font-semibold", kind === "tester" && "bg-primary text-primary-foreground")}>Testing</Link>
-              </div> : null}
-              <Badge variant="brand" className="hidden sm:inline-flex">{kind === "builder" ? "PRIVATE RELEASES" : "MOBILE FIRST"}</Badge>
-            </div>
-            <div className="flex min-w-0 max-w-full items-center rounded-full border border-border bg-card p-1 pl-3 shadow-sm">
-              <CircleUserRound className="size-4 shrink-0 text-success" aria-hidden="true" />
-              <span className="min-w-0 truncate px-2 text-xs font-semibold" title={identityWalletAddress ?? identityLabel}>
-                {identityWalletAddress && !isGuest ? <WalletName address={identityWalletAddress} /> : identityLabel}
-              </span>
-              <ThemeToggle />
-              {isGuest ? (
-                <span className="hidden border-l border-border px-3 text-xs text-muted-foreground sm:inline">Saved in this browser</span>
-              ) : (
-                <SignOutButton />
-              )}
-            </div>
-          </div>
+    <div className="workspace min-h-screen min-w-0 bg-background">
+      <a href="#workspace-content" className="sr-only z-[80] rounded-lg bg-primary p-3 text-primary-foreground focus:not-sr-only focus:fixed focus:left-4 focus:top-4">Skip to content</a>
+      <aside className="workspace-sidebar fixed inset-y-0 left-0 z-40 hidden w-60 flex-col px-4 py-7 lg:flex">
+        <Link href={kind === "builder" ? "/builder" : "/tester"} className="mb-10 flex items-center gap-2.5 px-3 text-2xl font-bold tracking-tight"><Square className="size-7" aria-hidden="true" />SeekerHub</Link>
+        <p className="px-3 text-[10px] font-semibold uppercase tracking-[0.18em] text-white/60">{kind === "builder" ? "Publishing workspace" : "Your beta library"}</p>
+        <nav aria-label="Workspace" className="mt-4 grid gap-1.5">
+          {items.map(({ href, label, icon: Icon }) => <Link key={href} href={href} aria-current={active(href) ? "page" : undefined} className={cn("sidebar-link flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-semibold", active(href) && "sidebar-link-active")}><Icon className="size-5" aria-hidden="true" />{label}</Link>)}
+        </nav>
+        {kind === "builder" ? <Link href="/builder/apps/new" className="sidebar-link mt-4 flex items-center gap-3 rounded-xl border border-white/20 px-4 py-3 text-sm font-semibold"><Plus className="size-5" aria-hidden="true" />New app</Link> : null}
+        {projectLinks.length ? <div className="mt-7 min-h-0 overflow-y-auto border-t border-white/15 pt-6"><p className="px-3 text-[10px] font-semibold uppercase tracking-[0.18em] text-white/60">My apps</p><div className="mt-3 grid gap-1">{projectLinks.map(project => <Link key={project.slug} href={`/builder/apps/${project.slug}`} className="sidebar-link flex min-w-0 items-center gap-3 rounded-xl px-3 py-2.5 text-sm"><Grid2X2 className="size-4 shrink-0" aria-hidden="true" /><span className="truncate">{project.name}</span></Link>)}</div></div> : null}
+        <div className="mt-auto space-y-4 pt-8">
+          {kind === "builder" || canBuild ? <Link href={kind === "builder" ? "/tester" : "/builder"} className="sidebar-link flex items-center gap-2 rounded-lg px-3 py-2 text-xs"><ArrowLeftRight className="size-4" aria-hidden="true" />{kind === "builder" ? "Switch to testing" : "Builder workspace"}</Link> : null}
+          {account}
+        </div>
+      </aside>
+      <div className="lg:pl-60">
+        <header className="flex min-w-0 items-center justify-between gap-4 border-b border-border bg-card px-4 py-3 lg:hidden">
+          <Link href={kind === "builder" ? "/builder" : "/tester"} className="flex items-center gap-2 font-bold tracking-tight"><Square className="size-5" aria-hidden="true" />SeekerHub</Link>
+          <div className="flex min-w-0 items-center gap-2">{kind === "builder" || canBuild ? <Link href={kind === "builder" ? "/tester" : "/builder"} className="rounded-lg border border-border px-3 py-2 text-xs font-semibold">{kind === "builder" ? "Testing" : "Builder"}</Link> : null}{account}</div>
         </header>
-
-        <div className={cn("grid min-w-0 gap-6", kind === "builder" && "lg:grid-cols-[250px_minmax(0,1fr)]")}>
-          {kind === "builder" ? <aside className="glass-panel h-fit p-2 lg:p-4">
-            <div className="hidden px-3 py-2 lg:block">
-              <div className="font-mono text-xs uppercase tracking-[0.22em] text-muted-foreground">Navigate</div>
-            </div>
-            <nav className="flex flex-wrap gap-1 lg:mt-2 lg:grid lg:gap-2">
-              {items.map((item) => {
-                const active = currentPath === item.href;
-                const Icon = item.icon;
-
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    className={cn(
-                      "flex items-center gap-2 rounded-2xl px-3 py-2 text-sm font-medium transition lg:gap-3 lg:px-4 lg:py-3",
-                      active ? "bg-primary text-primary-foreground" : "bg-card text-foreground hover:bg-muted",
-                    )}
-                  >
-                    <Icon className="size-4" />
-                    {item.label}
-                  </Link>
-                );
-              })}
-            </nav>
-          </aside> : null}
-          <main className="min-w-0">{children}</main>
+        <div className="mx-auto w-full min-w-0 max-w-[1500px] px-4 pb-28 pt-6 sm:px-7 lg:px-10 lg:pb-12 lg:pt-8">
+          <main id="workspace-content" tabIndex={-1} className="min-w-0 outline-none">
+          <div className={cn("min-w-0", compactHeader ? "hidden lg:mb-4 lg:block" : "mb-6")}>
+            <p className="mb-2 hidden text-xs font-medium text-muted-foreground lg:block">{kind === "builder" ? "Publishing workspace" : "Testing"}<span className="mx-2" aria-hidden="true">/</span>{title}</p>
+            {!compactHeader ? <h1 className="break-words text-2xl font-bold tracking-tight sm:text-3xl">{title}</h1> : null}
+            {!compactHeader && subtitle ? <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">{subtitle}</p> : null}
+          </div>
+          {children}
+          </main>
         </div>
       </div>
+      <nav aria-label="Mobile workspace" className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-3 gap-2 border-t border-border bg-card px-3 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] lg:hidden">
+        {items.map(({ href, label, icon: Icon }) => <Link key={href} href={href} aria-current={active(href) ? "page" : undefined} className={cn("flex min-h-14 flex-col items-center justify-center gap-1 rounded-xl text-[11px] font-semibold", active(href) ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted")}><Icon className="size-5" aria-hidden="true" />{label}</Link>)}
+      </nav>
     </div>
   );
 }

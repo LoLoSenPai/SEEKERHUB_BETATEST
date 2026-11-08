@@ -1,96 +1,40 @@
 import Link from "next/link";
+import { ArrowUpRight } from "lucide-react";
 import { DashboardFrame } from "@/src/components/layout/dashboard-frame";
-import { Badge } from "@/src/components/ui/badge";
-import { buttonVariants } from "@/src/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/src/components/ui/card";
-import { EmptyState } from "@/src/components/ui/empty-state";
-import { WalletLinkCard } from "@/src/features/wallet/wallet-link-card";
-import { WalletSignIn } from "@/src/features/wallet/wallet-sign-in";
-import { getTesterIdentityLabel } from "@/src/lib/tester-identity";
-import { getAccessibleReleasesForUser, getTesterIdentity } from "@/src/features/projects/queries";
-import { requireTesterSession } from "@/src/lib/session";
-import { cn, formatBytes } from "@/src/lib/utils";
+import { getAccessibleReleasesForUser, getTesterIdentity, getTesterRelease } from "@/src/features/projects/queries";
 import { prisma } from "@/src/lib/db";
+import { requireTesterSession } from "@/src/lib/session";
+import { getTesterIdentityLabel } from "@/src/lib/tester-identity";
+import { latestApps } from "@/src/features/tester/latest-apps";
+import { AppIcon } from "@/src/features/project-media/app-media";
+import { getProjectMedia } from "@/src/features/project-media/queries";
 
 export default async function TesterDashboardPage() {
   const session = await requireTesterSession();
-  const [releases, tester] = await Promise.all([
+  const [releases, tester, builder] = await Promise.all([
     getAccessibleReleasesForUser(session.user.id),
     getTesterIdentity(session.user.id),
+    prisma.builderProfile.findUnique({ where: { userId: session.user.id }, select: { id: true } }),
   ]);
-  const canBuild = Boolean(
-    await prisma.builderProfile.findUnique({ where: { userId: session.user.id }, select: { id: true } }),
-  );
+  const apps = latestApps(releases);
+  const decisions = await Promise.all(apps.map((release) => getTesterRelease(release.id, session.user.id)));
+  const media = await Promise.all(apps.map((release, index) =>
+    decisions[index]?.decision.canViewMetadata ? getProjectMedia(release.projectId) : [],
+  ));
 
-  return (
-    <DashboardFrame
-      kind="tester"
-      currentPath="/tester"
-      title="Your beta apps"
-      subtitle="Open a build, install the APK, and send feedback to its builder."
-      canBuild={canBuild}
-      isGuest={Boolean(session.user.isAnonymous)}
-      identityLabel={getTesterIdentityLabel({ ...session.user, wallets: tester?.wallets })}
-      identityWalletAddress={(tester?.wallets.find((wallet) => wallet.isPrimary) ?? tester?.wallets[0])?.address}
-    >
-      <div className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
-        <div className="space-y-6">
-          <Card className="rounded-[1.75rem]">
-            <CardHeader>
-              <CardTitle>Ready to test</CardTitle>
-              <CardDescription>Only apps you can currently access appear here.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {releases.length ? (
-                releases.map((release) => (
-                  <Link
-                    key={release.id}
-                    href={`/tester/releases/${release.id}`}
-                    className="block min-w-0 rounded-[1.4rem] border border-border bg-card p-5 transition hover:bg-muted/60 hover:shadow-md"
-                  >
-                    <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                      <div className="space-y-2">
-                        <div className="flex min-w-0 flex-wrap items-center gap-3">
-                          <h3 className="min-w-0 break-words text-lg font-semibold">{release.project.name}</h3>
-                          <Badge variant="brand">v{release.versionName}</Badge>
-                        </div>
-                        <p className="line-clamp-2 text-sm leading-7 text-muted-foreground">{release.changelog}</p>
-                      </div>
-                      <div className="flex items-center justify-between gap-3 text-sm text-muted-foreground lg:grid lg:text-right">
-                        <div>{release.buildAsset ? formatBytes(release.buildAsset.fileSizeBytes) : "No asset"}</div>
-                        <div className="font-semibold text-brand">Open build</div>
-                      </div>
-                    </div>
-                  </Link>
-                ))
-              ) : (
-                <EmptyState
-                  title="No accessible releases yet"
-                  description="Claim an invite link first, or link the wallet that your builder allowlisted for private beta access."
-                  action={
-                    <Link href="/" className={cn(buttonVariants({ variant: "secondary" }))}>
-                      Back to product
-                    </Link>
-                  }
-                />
-              )}
-            </CardContent>
-          </Card>
-        </div>
-
-        <div className="space-y-6">
-          {session.user.isAnonymous ? (
-            <Card className="rounded-[1.75rem] border-brand/30 bg-brand/5">
-              <CardHeader>
-                <CardTitle>Keep your tester access</CardTitle>
-                <CardDescription>Add an email or continue with a wallet to keep your apps and feedback on another browser.</CardDescription>
-              </CardHeader>
-              <CardContent><Link href="/tester/upgrade" className={cn(buttonVariants())}>Add recovery email</Link><WalletSignIn /></CardContent>
-            </Card>
-          ) : null}
-          {!session.user.isAnonymous && !releases.length ? <details className="rounded-[1.6rem] border border-border bg-surface p-4"><summary className="cursor-pointer font-semibold">Builder asked you to use a wallet?</summary><div className="mt-4"><WalletLinkCard linkedWallets={tester?.wallets ?? []} /></div></details> : null}
-        </div>
-      </div>
-    </DashboardFrame>
-  );
+  return <DashboardFrame kind="tester" currentPath="/tester" title="My apps" subtitle="Your private betas, all in one place." canBuild={Boolean(builder)} isGuest={Boolean(session.user.isAnonymous)} identityLabel={getTesterIdentityLabel({ ...session.user, wallets: tester?.wallets })} identityWalletAddress={(tester?.wallets.find((wallet) => wallet.isPrimary) ?? tester?.wallets[0])?.address}>
+    {session.user.isAnonymous ? <div className="mb-6 rounded-2xl border border-brand/25 bg-brand/5 p-4 text-sm">Your apps are saved in this browser. <Link href="/tester/account" className="font-semibold underline">Add account recovery</Link> to keep your access.</div> : null}
+    {apps.length ? <div className="grid min-w-0 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+      {apps.map((release, index) => {
+        const decision = decisions[index]?.decision;
+        if (!decision?.canViewMetadata) return null;
+        const renewal = decision.reasons.some((reason) => reason.blocking && ["SGT_VERIFICATION_REQUIRED", "SGT_VERIFICATION_EXPIRED"].includes(reason.code));
+        return <Link key={release.projectId} href={`/tester/releases/${release.id}`} className="group flex min-w-0 flex-col gap-4 rounded-[1.5rem] border border-border bg-card p-5 transition hover:border-brand/50 hover:shadow-md">
+          <div className="flex items-start justify-between gap-3"><AppIcon media={media[index]} name={release.project.name} className="size-14" /><ArrowUpRight className="size-5 shrink-0 text-muted-foreground" /></div>
+          <div className="min-w-0"><h2 className="break-words text-lg font-semibold">{release.project.name}</h2><p className="mt-1 line-clamp-2 text-sm leading-6 text-muted-foreground">{release.project.description || "Private Android beta"}</p></div>
+          <div className="mt-auto flex flex-wrap items-center justify-between gap-2 text-sm"><span className="text-muted-foreground">Version {release.versionName}</span><span className="font-semibold text-brand">{decision.canDownload ? "Ready to download" : renewal ? "Verify Seeker to download" : "Access action needed"}</span></div>
+        </Link>;
+      })}
+    </div> : <div className="rounded-[1.5rem] border border-border bg-card p-6"><h2 className="text-lg font-semibold">No apps yet</h2><p className="mt-2 text-sm leading-6 text-muted-foreground">Open an invitation from a builder, or link the wallet used for your beta access.</p><Link href="/tester/account" className="mt-4 inline-block font-semibold underline">Go to account</Link></div>}
+  </DashboardFrame>;
 }

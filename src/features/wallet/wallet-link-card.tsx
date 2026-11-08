@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/src
 import { ContinueWithWallet } from "./continue-with-wallet";
 import { useWalletAction } from "./use-wallet-action";
 import { WalletName } from "./wallet-name";
+import type { WalletSgtContext } from "./wallet-request";
 
 type LinkedWalletSummary = {
   id: string;
@@ -15,10 +16,11 @@ type LinkedWalletSummary = {
   seekerGenesisVerificationExpiresAt: Date | null;
 };
 
-export function WalletLinkCard({ linkedWallets, requiredSeeker = false, showSeeker = true }: {
+export function WalletLinkCard({ linkedWallets, requiredSeeker = false, showSeeker = true, sgtContext }: {
   linkedWallets: LinkedWalletSummary[];
   requiredSeeker?: boolean;
   showSeeker?: boolean;
+  sgtContext?: WalletSgtContext;
 }) {
   const wallet = useWallet();
   const action = useWalletAction();
@@ -40,7 +42,7 @@ export function WalletLinkCard({ linkedWallets, requiredSeeker = false, showSeek
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        <ContinueWithWallet action={action} accountWalletConnected={Boolean(connectedLinkedWallet)} />
+        <ContinueWithWallet action={action} accountWalletConnected={Boolean(connectedLinkedWallet)} sgtContext={sgtContext} />
         <div className="rounded-[1.2rem] border border-border bg-muted/40 p-4">
           <div className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Account wallets</div>
           {linkedWallets.length ? <div className="mt-3 grid gap-3">
@@ -58,13 +60,13 @@ export function WalletLinkCard({ linkedWallets, requiredSeeker = false, showSeek
           </div> : <p className="mt-3 text-sm text-muted-foreground">No wallet saved yet. Continue above to create or recover wallet access.</p>}
         </div>
         {showSeeker ? <div className="grid gap-3">
-          <p className="text-xs leading-5 text-muted-foreground">SGT ownership is checked separately and is valid for 24 hours. It does not prove device hardware trust.</p>
+          <p className="text-xs leading-5 text-muted-foreground">{sgtContext ? "Wallet sign-in can include a fresh SGT check with one explicit signature. For a linked wallet, use the check below." : "SGT ownership is checked separately and is valid for 24 hours."} A successful check is cached for 24 hours. It does not prove device hardware trust.</p>
           <Button type="button" variant={requiredSeeker ? "primary" : "secondary"}
             disabled={action.pending || !wallet.connected || !wallet.signMessage || !connectedLinkedWallet || connectedSeekerVerified}
             onClick={() => void action.run("VERIFY_SGT")}>
             {action.operation === "VERIFY_SGT" ? "Checking SGT ownership..." : connectedSeekerVerified ? "SGT already verified (24h)" : "Verify Seeker Genesis Token"}
           </Button>
-          {!connectedLinkedWallet ? <p className="text-xs text-muted-foreground">Continue with wallet first, then verify SGT ownership.</p> : null}
+          {!connectedLinkedWallet ? <p className="text-xs text-muted-foreground">{sgtContext ? "Continue above to authorize wallet sign-in and the SGT check together." : "Continue with wallet first, then verify SGT ownership."}</p> : null}
         </div> : null}
       </CardContent>
     </Card>

@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import AxeBuilder from "@axe-core/playwright";
 import { PrismaPg } from "@prisma/adapter-pg";
@@ -6,6 +6,22 @@ import { PrismaClient } from "@prisma/client";
 import { expect, test, type Page } from "@playwright/test";
 import { hashPassword } from "better-auth/crypto";
 import { apkFixture } from "../fixtures/apk";
+
+function reviewClientHeaders() {
+  // Keep one client identity per test without accumulating limits across reruns.
+  const octets = randomBytes(2);
+  return { "x-forwarded-for": `198.18.${octets[0]}.${octets[1]}` };
+}
+
+async function claimGuestInvite(page: Page) {
+  const invitePath = new URL(page.url()).pathname;
+  const claimed = page.waitForResponse(response =>
+    new URL(response.url()).pathname === `/api${invitePath.replace("/invite/", "/invites/")}/claim` &&
+    response.request().method() === "POST");
+  await page.getByRole("button", { name: "Open beta access as guest", exact: true }).click();
+  const response = await claimed;
+  expect(response.status(), `Invitation claim: ${await response.text()}`).toBe(200);
+}
 
 // These tests deliberately create data only in the named local review environment.
 function reviewDatabase() {
@@ -28,8 +44,9 @@ test("uploads a synthetic APK through the UI and serves the exact bytes to a gue
   test.setTimeout(120_000);
   const { databaseUrl, baseUrl, storageOrigin } = reviewDatabase();
   const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
-  const builderContext = await browser.newContext({ permissions: ["clipboard-read", "clipboard-write"] });
-  const guestContext = await browser.newContext();
+  const extraHTTPHeaders = reviewClientHeaders();
+  const builderContext = await browser.newContext({ permissions: ["clipboard-read", "clipboard-write"], extraHTTPHeaders });
+  const guestContext = await browser.newContext({ extraHTTPHeaders });
   const pageErrors: string[] = [];
   for (const context of [builderContext, guestContext]) context.on("page", (page) => {
     page.on("pageerror", (error) => pageErrors.push(error.message));
@@ -76,7 +93,7 @@ test("uploads a synthetic APK through the UI and serves the exact bytes to a gue
     expect(new URL(inviteUrl).origin).toBe(baseUrl);
     const guestPage = await guestContext.newPage();
     await guestPage.goto(inviteUrl);
-    await guestPage.getByRole("button", { name: "Open beta access as guest", exact: true }).click();
+    await claimGuestInvite(guestPage);
     await expect(guestPage.getByRole("link", { name: "Download APK" })).toBeVisible();
     const downloadPromise = guestPage.waitForEvent("download");
     await guestPage.getByRole("link", { name: "Download APK" }).click();
@@ -96,28 +113,24 @@ test("uploads a synthetic APK through the UI and serves the exact bytes to a gue
 
 async function checkAccessibility(page: Page, darkScreenshot: string) {
   for (const theme of ["light", "dark"] as const) {
-    if (theme === "dark") await page.getByRole("button", { name: "Switch to dark theme" }).click();
+    if (theme === "dark") {
+      await page.getByRole("button", { name: "Account and appearance" }).filter({ visible: true }).click();
+      await page.getByRole("button", { name: "Switch to dark theme" }).click();
+      await page.keyboard.press("Escape");
+    }
     await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
     if (theme === "dark") await page.waitForTimeout(300);
-    if (theme === "dark") await page.screenshot({ path: darkScreenshot, fullPage: true });
+    if (theme === "dark") await page.screenshot({ path: darkScreenshot, fullPage: true, caret: "initial" });
     const result = await new AxeBuilder({ page }).analyze();
     expect.soft(result.violations, `${theme}: ${JSON.stringify(result.violations, null, 2)}`).toEqual([]);
     expect.soft(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   }
+  await page.getByRole("button", { name: "Account and appearance" }).filter({ visible: true }).click();
   await page.getByRole("button", { name: "Switch to light theme" }).click();
+  await page.keyboard.press("Escape");
   await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
   await page.waitForTimeout(300);
 }
-
-test.beforeAll(async () => {
-  const { databaseUrl } = reviewDatabase();
-  const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
-  try {
-    await prisma.rateLimit.deleteMany();
-  } finally {
-    await prisma.$disconnect();
-  }
-});
 
 for (const viewport of [{ width: 390, height: 844 }, { width: 1440, height: 900 }]) {
   test(`builder publishes and guest tests a scoped release at ${viewport.width}px`, async ({ browser }, testInfo) => {
@@ -130,8 +143,9 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 1440, height: 900 
     const slug = `e2e-${id}`;
     const notes = `Please test this release ${id}.`;
     const feedbackTitle = `E2E feedback ${id}`;
-    const builderContext = await browser.newContext({ viewport, colorScheme: "light", permissions: ["clipboard-read", "clipboard-write"] });
-    const guestContext = await browser.newContext({ viewport, colorScheme: "light" });
+    const extraHTTPHeaders = reviewClientHeaders();
+    const builderContext = await browser.newContext({ viewport, colorScheme: "light", permissions: ["clipboard-read", "clipboard-write"], extraHTTPHeaders });
+    const guestContext = await browser.newContext({ viewport, colorScheme: "light", extraHTTPHeaders });
     const pageErrors: string[] = [];
     for (const context of [builderContext, guestContext]) {
       context.on("page", (page) => {
@@ -168,7 +182,8 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 1440, height: 900 
       await builderPage.getByRole("button", { name: "Sign in", exact: true }).click();
       await expect(builderPage).toHaveURL(new RegExp(`/releases/${release.id}`), { timeout: 30_000 });
       await expect(builderPage.getByText("Prepare your release")).toBeVisible();
-      await builderPage.screenshot({ path: testInfo.outputPath(`draft-${viewport.width}.png`), fullPage: true });
+      // Screenshot caret hiding mutates input styles and can race React hydration.
+      await builderPage.screenshot({ path: testInfo.outputPath(`draft-${viewport.width}.png`), fullPage: true, caret: "initial" });
       await checkAccessibility(builderPage, testInfo.outputPath(`draft-dark-${viewport.width}.png`));
 
       await builderPage.getByLabel(/What should testers try/).fill(notes);
@@ -194,13 +209,13 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 1440, height: 900 
         }, { message: "Keyboard-focused tester limit must be visible and not covered by the sticky footer" })
           .toEqual({ inViewport: true, clearOfFooter: true });
       }
-      await builderPage.screenshot({ path: testInfo.outputPath(`audience-${viewport.width}.png`), fullPage: true });
+      await builderPage.screenshot({ path: testInfo.outputPath(`audience-${viewport.width}.png`), fullPage: true, caret: "initial" });
       await checkAccessibility(builderPage, testInfo.outputPath(`audience-dark-${viewport.width}.png`));
       await builderPage.getByRole("button", { name: "Continue" }).click();
       await expect(builderPage.getByRole("heading", { name: "Review before publishing" })).toBeFocused();
       await expect(builderPage.getByRole("region", { name: "Review before publication" })).toContainText("This release only");
       await expect(builderPage.getByRole("region", { name: "Review before publication" })).toContainText(notes);
-      await builderPage.screenshot({ path: testInfo.outputPath(`review-${viewport.width}.png`), fullPage: true });
+      await builderPage.screenshot({ path: testInfo.outputPath(`review-${viewport.width}.png`), fullPage: true, caret: "initial" });
       const publishButton = builderPage.getByRole("button", { name: "Publish and create link" });
       await expect(publishButton).toBeEnabled({ timeout: 5_000 });
       expect((await prisma.release.findUniqueOrThrow({ where: { id: release.id } })).status).toBe("DRAFT");
@@ -222,11 +237,11 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 1440, height: 900 
 
       const guestPage = await guestContext.newPage();
       await guestPage.goto(inviteUrl);
-      await guestPage.getByRole("button", { name: "Open beta access as guest", exact: true }).click();
+      await claimGuestInvite(guestPage);
       await expect(guestPage).toHaveURL(new RegExp(`/tester/releases/${release.id}|/tester$`));
       if (new URL(guestPage.url()).pathname === "/tester") await guestPage.getByRole("link", { name: new RegExp(`E2E app ${id}`) }).click();
       await expect(guestPage.getByRole("link", { name: "Download APK" })).toBeVisible();
-      await guestPage.screenshot({ path: testInfo.outputPath(`tester-${viewport.width}.png`), fullPage: true });
+      await guestPage.screenshot({ path: testInfo.outputPath(`tester-${viewport.width}.png`), fullPage: true, caret: "initial" });
       await checkAccessibility(guestPage, testInfo.outputPath(`tester-dark-${viewport.width}.png`));
       const downloadsBeforeRequest = await prisma.downloadEvent.count({ where: { releaseId: release.id, userId: { not: null } } });
       expect.soft(downloadsBeforeRequest, "Viewing the release must not record a download").toBe(0);
@@ -236,6 +251,7 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 1440, height: 900 
       expect(location.origin).toBe(storageOrigin);
       expect(location.pathname).toContain(`/e2e/${id}/fixture.apk`);
 
+      await guestPage.getByText("After your test: leave feedback", { exact: true }).click();
       await guestPage.getByLabel("Title", { exact: true }).fill(feedbackTitle);
       await guestPage.getByLabel("Severity").selectOption("HIGH");
       await guestPage.getByLabel("Description", { exact: true }).fill("The test feature is blocked after opening the app.");

@@ -20,6 +20,7 @@ export function InviteClaimCard({
   walletRecommended = false,
   seekerRequired = false,
   seekerRecommended = false,
+  combinedSeekerCheck = false,
   currentIdentity = null,
 }: {
   token: string;
@@ -29,6 +30,7 @@ export function InviteClaimCard({
   walletRecommended?: boolean;
   seekerRequired?: boolean;
   seekerRecommended?: boolean;
+  combinedSeekerCheck?: boolean;
   currentIdentity?: string | null;
 }) {
   const router = useRouter();
@@ -53,19 +55,19 @@ export function InviteClaimCard({
   }
 
   return (
-    <Card className="rounded-[2rem] border-border bg-surface shadow-[0_24px_90px_rgba(15,23,42,0.08)]">
+    <Card aria-label={`${projectName} invitation access`} className="border-border bg-card">
       <CardHeader>
-        <div className="section-eyebrow">Private Android beta</div>
-        <CardTitle className="break-words text-2xl">{projectName}</CardTitle>
+        <CardTitle className="break-words text-xl">Open this beta</CardTitle>
         <CardDescription>
           {releaseVersion ? `Version ${releaseVersion}. ` : ""}
           {currentIdentity ? "Open with your current tester account. Any wallet or SGT requirements are checked before download." : walletRequired ? "Wallet access is required for this beta. Create or recover your tester access before opening it." : "Use a wallet to keep or recover your tester access, or start as a guest in this browser."}
         </CardDescription>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="mt-4 space-y-4">
         {currentIdentity ? <p className="break-words text-sm text-muted-foreground">Signed in as <span className="font-semibold text-foreground">{currentIdentity}</span></p> : null}
         {currentIdentity || !walletRequired ? <Button
           size="lg"
+          className="w-full"
           variant={currentIdentity ? "primary" : "secondary"}
           disabled={loading || navigating || walletAction.pending || (!currentIdentity && walletChosen)}
           onClick={async () => {
@@ -104,13 +106,13 @@ export function InviteClaimCard({
         >
           {loading || navigating ? "Opening beta access..." : currentIdentity ? "Open beta access" : "Open beta access as guest"}
         </Button> : null}
-        {walletRecommended || seekerRecommended ? <div className="rounded-2xl border border-border bg-muted/50 p-4 text-sm leading-6">
+        {walletRecommended || seekerRecommended ? <details className="rounded-2xl border border-border bg-muted/50 p-4 text-sm leading-6"><summary className="cursor-pointer font-semibold">Wallet and Seeker requirements</summary><div className="mt-2">
           {walletRequired ? "A wallet is required." : currentIdentity ? "Some builds require a wallet. Your current account requirements will be checked before download." : "Some builds require a wallet. Using one now is recommended; guest access remains available for standard builds."}
           {seekerRequired ? " Seeker Genesis Token verification is also required before download." : seekerRecommended ? " Some builds also require Seeker Genesis Token verification." : ""}
-          {seekerRecommended ? " If needed, SGT verification is a separate signature after sign-in, valid for 24 hours. It does not prove hardware trust." : ""}
-        </div> : null}
-        <ContinueWithWallet action={walletAction} disabled={loading || navigating}
-          onChoose={() => { setWalletChosen(true); setError(null); }} onAuthenticated={claim} />
+          {seekerRecommended ? " SGT verification is valid for 24 hours and does not prove hardware trust." : ""}
+        </div></details> : null}
+        {!currentIdentity || walletRequired || walletRecommended ? <ContinueWithWallet action={walletAction} disabled={loading || navigating} sgtContext={combinedSeekerCheck ? { inviteToken: token } : undefined}
+          onChoose={() => { setWalletChosen(true); setError(null); }} onAuthenticated={claim} /> : null}
         {!currentIdentity && !walletRequired && walletChosen ? <Button type="button" variant="ghost" disabled={walletAction.pending || loading || navigating}
           onClick={() => setWalletChosen(false)}>Choose guest access instead</Button> : null}
         {error ? <p role="alert" className="text-sm text-danger">{error}</p> : null}

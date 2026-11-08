@@ -45,6 +45,18 @@ enum StorageObjectKind {
   RELEASE_APK
 }
 
+enum ProjectMediaKind {
+  ICON
+  BANNER
+  SCREENSHOT
+}
+
+enum ProjectMediaStatus {
+  PENDING
+  READY
+  DELETING
+}
+
 enum BuilderStatus {
   ACTIVE
   SUSPENDED
@@ -180,9 +192,32 @@ model AppProject {
   testerMemberships  TesterMembership[]
   testerAccesses     TesterAccess[]
   uploadSessions     ReleaseUploadSession[]
+  media              ProjectMedia[]
 
   @@index([ownerId])
   @@index([deletedAt, purgeAfter])
+}
+
+model ProjectMedia {
+  id             String             @id @default(cuid())
+  projectId      String
+  kind           ProjectMediaKind
+  status         ProjectMediaStatus @default(PENDING)
+  storageKey     String             @unique
+  fileSizeBytes  BigInt
+  width          Int
+  height         Int
+  position       Int
+  replacesId     String?
+  expiresAt      DateTime
+  readyAt        DateTime?
+  deletedAt      DateTime?
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+  project        AppProject         @relation(fields: [projectId], references: [id], onDelete: Restrict)
+
+  @@index([projectId, status, kind, position])
+  @@index([status, expiresAt])
 }
 
 model Release {

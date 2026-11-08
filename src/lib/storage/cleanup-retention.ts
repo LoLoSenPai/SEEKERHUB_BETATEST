@@ -35,6 +35,7 @@ export async function pruneRetention(now: Date) {
     purgeAfter: { lte: now },
     releases: { none: {} },
     uploadSessions: { none: { reservationReleasedAt: null } },
+    media: { none: {} },
   };
   const [projectsPurged] = await Promise.all([
     pruneBatch(

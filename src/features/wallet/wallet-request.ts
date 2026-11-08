@@ -1,6 +1,8 @@
 import bs58 from "bs58";
+import type { WalletAuthPurpose, WalletSgtContext, WalletSgtOutcome } from "@/src/lib/solana/wallet-types";
 
-export type WalletPurpose = "SIGN_IN" | "VERIFY_SGT";
+export type WalletPurpose = WalletAuthPurpose | "VERIFY_SGT";
+export type { WalletSgtContext, WalletSgtOutcome };
 
 export class WalletRequestError extends Error {
   constructor(message: string, public readonly code?: string) {
@@ -24,29 +26,34 @@ async function post(path: string, body: object) {
   return payload;
 }
 
-export async function requestWalletAction({ address, signMessage, getAddress, purpose }: {
+export async function requestWalletAction({ address, signMessage, getAddress, purpose, sgtContext }: {
   address: string;
   signMessage: (message: Uint8Array) => Promise<Uint8Array>;
   getAddress: () => string | undefined;
   purpose: WalletPurpose;
+  sgtContext?: WalletSgtContext;
 }) {
+  if ((purpose === "SIGN_IN_AND_VERIFY_SGT") !== Boolean(sgtContext)) {
+    throw new WalletRequestError("Choose an invitation or release requiring an SGT check before combined sign-in.");
+  }
   const assertSameWallet = () => {
     if (getAddress() !== address) throw new WalletRequestError("Wallet changed. Select your wallet and try again.");
   };
   assertSameWallet();
-  const challenge = await post("/api/wallet/challenge", { address, purpose });
+  const challenge = await post("/api/wallet/challenge", { address, purpose, ...(sgtContext ? { sgtContext } : {}) });
   if (typeof challenge.challengeId !== "string" || typeof challenge.message !== "string") {
     throw new WalletRequestError("Invalid wallet challenge. Please try again.");
   }
   assertSameWallet();
   const signature = await signMessage(new TextEncoder().encode(challenge.message));
   assertSameWallet();
-  const payload = await post(purpose === "SIGN_IN" ? "/api/auth/sign-in/solana-wallet" : "/api/wallet/verify-seeker", {
+  const payload = await post(purpose !== "VERIFY_SGT" ? "/api/auth/sign-in/solana-wallet" : "/api/wallet/verify-seeker", {
     challengeId: challenge.challengeId,
     address,
     signature: bs58.encode(signature),
+    ...(purpose === "SIGN_IN_AND_VERIFY_SGT" ? { purpose } : {}),
   });
-  if (purpose === "SIGN_IN" && payload.success !== true) throw new WalletRequestError("Wallet sign-in failed. Please try again.");
+  if (purpose !== "VERIFY_SGT" && payload.success !== true) throw new WalletRequestError("Wallet sign-in failed. Please try again.");
   if (purpose === "VERIFY_SGT" && payload.verified !== true) {
     throw new WalletRequestError("No Seeker Genesis Token found in this wallet. You can retry or select another wallet.");
   }

@@ -14,6 +14,7 @@ import {
   assertUploadDeletionAllowed,
 } from "@/src/lib/storage/cleanup-uploads";
 import { pruneRetention } from "@/src/lib/storage/cleanup-retention";
+import { assertMediaDeletionAllowed, assertMediaObjectAbsent, queueExpiredProjectMedia, settleMediaDeletion } from "@/src/lib/storage/cleanup-media";
 
 const MAX_ATTEMPTS = 5;
 const PROCESSING_LEASE_MS = 15 * 60_000;
@@ -127,6 +128,8 @@ async function processDeletionTasks(deadline: number) {
               "Refusing to purge a release outside its expired trash window.",
             );
           }
+        } else if (task.resourceType === "ProjectMedia") {
+          await assertMediaDeletionAllowed(prisma, task, new Date());
         } else if (uploadTaskTypes.includes(task.resourceType)) {
           await assertUploadDeletionAllowed(prisma, task, new Date());
         } else {
@@ -146,6 +149,7 @@ async function processDeletionTasks(deadline: number) {
             abortSignal: AbortSignal.timeout(Math.min(10_000, remainingMs)),
           },
         );
+        if (task.resourceType === "ProjectMedia") await assertMediaObjectAbsent(task.storageKey);
         const didComplete = await prisma.$transaction(async (tx) => {
           const completedTask = await tx.storageDeletionTask.updateMany({
             where: lease,
@@ -178,6 +182,8 @@ async function processDeletionTasks(deadline: number) {
             }
             if (release?.deletedAt)
               await tx.release.delete({ where: { id: release.id } });
+          } else if (task.resourceType === "ProjectMedia") {
+            await settleMediaDeletion(tx, task);
           } else if (uploadTaskTypes.includes(task.resourceType)) {
             await settleUploadReservation(tx, task.resourceId);
           }
@@ -262,12 +268,14 @@ export async function runStorageCleanup() {
       now,
       Math.min(deadline, startedAt + WORK_BUDGET_MS / 2),
     );
+    const mediaQueued = await queueExpiredProjectMedia(now, deadline);
     const deletion = await processDeletionTasks(deadline);
     const { orphanReleasesPurged, projectsPurged } = await pruneRetention(now);
     const backlog = await logBacklog(new Date());
     logger.info("cleanup.completed", {
       durationMs: Date.now() - startedAt,
       reservationsQueued,
+      mediaQueued,
       deletion,
       backlog,
       budgetReached: Date.now() >= deadline,
@@ -275,6 +283,7 @@ export async function runStorageCleanup() {
     return {
       ok: true,
       reservationsQueued,
+      mediaQueued,
       objectsDeleted: deletion.completed,
       deletion,
       backlog,

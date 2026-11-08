@@ -63,6 +63,43 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("wallet UI", () => {
+  it("offers combined consent only with explicit SGT context and only on click", () => {
+    const controller = action();
+    const sgtContext = { releaseId: "release-id" };
+    const callback = vi.fn();
+    const markup = renderToStaticMarkup(createElement(ContinueWithWallet, { action: controller, sgtContext, onAuthenticated: callback }));
+    expect(markup).toContain("One signature authorizes both");
+    expect(markup).toContain("does not prove your current device is a Seeker");
+    expect(controller.run).not.toHaveBeenCalled();
+    button("Continue with wallet + check SGT").onClick?.({} as never);
+    expect(controller.run).toHaveBeenCalledExactlyOnceWith("SIGN_IN_AND_VERIFY_SGT", callback, sgtContext);
+  });
+
+  it("keeps already linked wallets on the explicit single SGT action even with combined context", () => {
+    const markup = renderToStaticMarkup(createElement(WalletLinkCard, { linkedWallets: [{
+      id: "w", address: "wallet-address", isPrimary: true, seekerGenesisVerificationExpiresAt: null,
+    }], sgtContext: { releaseId: "release" } }));
+    expect(markup).not.toContain("Continue with wallet + check SGT");
+    expect(button("Verify Seeker Genesis Token").disabled).toBe(false);
+    expect(mocks.wallet.signMessage).not.toHaveBeenCalled();
+  });
+
+  it("notifies and calls back on partial combined success without an automatic second signature", async () => {
+    const sgt = { verified: false, status: "unavailable", code: "SGT_RPC_UNAVAILABLE" };
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(Response.json({ challengeId: "c", message: "Combined consent" }))
+      .mockResolvedValueOnce(Response.json({ success: true, user: { id: "tester" }, sgt }));
+    vi.stubGlobal("fetch", fetchMock);
+    mocks.wallet.signMessage = vi.fn().mockResolvedValue(new Uint8Array([1]));
+    // WalletSignIn owns the real action hook and refreshes the authenticated session.
+    renderToStaticMarkup(createElement(WalletSignIn, { sgtContext: { releaseId: "release" }, returnTo: "/tester" }));
+    button("Continue with wallet + check SGT").onClick?.({} as never);
+    await vi.waitFor(() => expect(mocks.refresh).toHaveBeenCalledOnce());
+    expect(mocks.notify).toHaveBeenCalledExactlyOnceWith("$sessionSignal");
+    expect(mocks.wallet.signMessage).toHaveBeenCalledOnce();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
   it("requires an explicit sign click after autoConnect, with no passive signing", () => {
     const controller = action();
     renderToStaticMarkup(createElement(ContinueWithWallet, { action: controller }));
@@ -150,7 +187,8 @@ describe("wallet UI", () => {
     const markup = renderToStaticMarkup(createElement(InviteClaimCard, { token: "token", projectName: "Beta", walletRecommended: true, seekerRecommended: true }));
     expect(markup).toContain("Some builds require a wallet");
     expect(button("Open beta access as guest").disabled).toBe(false);
-    expect(markup).toContain("separate signature after sign-in");
+    expect(markup).toContain("Some builds also require Seeker Genesis Token verification");
+    expect(markup).not.toContain("separate signature after sign-in");
   });
 
   it("hides guest access only when wallet is required", () => {

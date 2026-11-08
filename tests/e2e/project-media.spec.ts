@@ -23,7 +23,7 @@ async function waitForWorkspaceAppearance(page: Page) {
 test("builder adds private app images and an invited tester can return to feedback", async ({ browser }, testInfo) => {
   test.setTimeout(120_000);
   const databaseUrl = process.env.DATABASE_URL;
-  const baseUrl = process.env.PLAYWRIGHT_BASE_URL;
+  const baseUrl = process.env.PLAYWRIGHT_BASE_URL ?? process.env.NEXT_PUBLIC_APP_URL;
   const endpoint = process.env.S3_ENDPOINT;
   if (process.env.RUN_INTEGRATION_TESTS !== "true" || !databaseUrl || !baseUrl || !endpoint ||
       !new URL(databaseUrl).pathname.includes("test") ||

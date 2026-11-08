@@ -8,7 +8,7 @@ SeekerHub is a web-first private Android beta distribution service for Solana Mo
 - Private app icons, banners and screenshots are normalized to WebP, with bounded inputs/outputs, an 8 MiB per-project cap and shared builder-quota accounting. See the [media feature README](src/features/project-media/README.md) for exact limits, authorization and cleanup behavior.
 - SGT-required invitation/release contexts can opt into explicit `SIGN_IN_AND_VERIFY_SGT`: one signature authorizes both login and a fresh server-side SGT check. RPC failure retains login without granting or refreshing SGT verification. Existing `SIGN_IN` is unchanged; already-linked wallets keep an explicit separate SGT action. Neither flow is hardware attestation.
 - Current local validation: **355 unit tests across 45 files; 80 integration tests across 12 files; 20/20 E2E tests; lint, typecheck, production build and isolated artifact check pass**. Desktop/mobile visual evidence and the reviewed boundaries are recorded in [design-qa.md](design-qa.md).
-- **Release authorized on 2026-11-08.** Additive migration `20261108000000_project_media` has been applied to Neon after backup/restore validation. The application rollout from `main` is in progress; see the readiness checkpoint for verified deployment status.
+- **Deployed on 2026-11-08** from `main` to `https://seeker-hub.lololabs.xyz`. Additive migration `20261108000000_project_media` is applied to Neon after backup/restore validation. Public production health and authorization smoke checks pass; see the readiness checkpoint for deployment evidence and remaining real-device checks.
 
 ## Stack
 

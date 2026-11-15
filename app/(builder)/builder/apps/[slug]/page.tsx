@@ -65,7 +65,7 @@ export default async function BuilderProjectPage({ params, searchParams }: {
           ].map(({ icon: Icon, title, text, href }) => <Link key={title} href={href} className="group flex items-start gap-3 rounded-xl p-2 hover:bg-muted"><span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-warm text-warm-foreground"><Icon className="size-5" aria-hidden="true" /></span><div><h3 className="text-sm font-semibold group-hover:underline">{title}</h3><p className="mt-0.5 text-xs leading-5 text-muted-foreground">{text}</p></div></Link>)}</div></section>
         </div>
         <aside className="min-w-0 border-t border-border pt-6 xl:border-t-0 xl:border-l xl:pt-0 xl:pl-6" aria-label="App presentation">
-          <h2 className="mb-4 text-lg font-bold">App presentation</h2><AppBanner media={media} className="aspect-[16/7]" />
+          <h2 className="mb-4 text-lg font-bold">App presentation</h2><AppBanner media={media} />
           <div className="my-4 flex min-w-0 items-center gap-3"><AppIcon media={media} name={project.name} className="size-12" /><div className="min-w-0"><h3 className="break-words font-bold">{project.name}</h3><p className="text-xs text-muted-foreground">As seen by your invited testers</p></div></div>
           <AppScreenshots media={media} />
           {!media.some(item => item.kind === "SCREENSHOT") ? <p className="rounded-xl border border-dashed border-border p-4 text-xs leading-6 text-muted-foreground">Add real screenshots to show testers what your app does. A simple fallback is shown until you add your own images.</p> : null}
@@ -74,7 +74,7 @@ export default async function BuilderProjectPage({ params, searchParams }: {
       </div>
       <section id="settings" className="mt-10 scroll-mt-5 border-t border-border pt-8">
         <h2 className="text-xl font-bold">App profile</h2><p className="mb-5 mt-1 text-sm text-muted-foreground">Help testers recognize what they are downloading.</p>
-        <div className="grid min-w-0 gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
+        <div className="grid min-w-0 items-start gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
           <div className="rounded-2xl border border-border bg-card p-5"><ProjectForm project={{ id: project.id, name: project.name, description: project.description }} />{project.androidPackageName ? <p className="mt-4 break-all text-xs text-muted-foreground">Android package: {project.androidPackageName}</p> : null}</div>
           <div id="images" className="min-w-0 scroll-mt-5 rounded-2xl border border-border bg-card p-5"><ProjectMediaManager projectId={project.id} initialMedia={media} /></div>
         </div>

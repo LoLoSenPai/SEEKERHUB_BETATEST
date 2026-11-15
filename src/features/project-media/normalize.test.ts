@@ -17,10 +17,22 @@ describe("project media normalization with real sharp", () => {
     expect(metadata.exif).toBeUndefined(); expect(metadata.icc).toBeUndefined(); expect(metadata.xmp).toBeUndefined();
   });
   it("crops banners and preserves screenshot aspect ratio without enlarging", async () => {
-    expect(await normalizeProjectMedia(await raster(100, 100), "BANNER")).toMatchObject({ width: 1600, height: 900 });
+    expect(await normalizeProjectMedia(await raster(100, 100), "BANNER")).toMatchObject({ width: 1200, height: 600 });
     const image = await normalizeProjectMedia(await raster(1200, 2400), "SCREENSHOT");
     expect(image).toMatchObject({ width: 960, height: 1920 }); expect(image.data.length).toBeLessThanOrEqual(1024 * 1024);
     expect(await normalizeProjectMedia(await raster(200, 300), "SCREENSHOT")).toMatchObject({ width: 200, height: 300 });
+  });
+  it("preserves both edges of a Store-size banner instead of cropping to 16:9", async () => {
+    const input = await sharp({ create: { width: 1200, height: 600, channels: 3, background: "#ffffff" } })
+      .composite([{ input: await raster(60, 600), left: 0, top: 0 }, { input: await raster(60, 600), left: 1140, top: 0 }]).png().toBuffer();
+    const result = await normalizeProjectMedia(input, "BANNER");
+    const { data, info } = await sharp(result.data).raw().toBuffer({ resolveWithObject: true });
+    expect(info).toMatchObject({ width: 1200, height: 600 });
+    for (const x of [20, 1180]) {
+      const offset = (300 * info.width + x) * info.channels;
+      expect(data[offset]).toBeLessThan(100);
+      expect(data[offset + 1]).toBeGreaterThan(90);
+    }
   });
   it("rejects SVG, GIF, corrupt inputs, oversize bytes and excessive dimensions", async () => {
     for (const input of [Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"/>'), Buffer.from("GIF89a"), Buffer.from([0xff, 0xd8, 0xff, 0]), Buffer.alloc(3 * 1024 * 1024 + 1)]) {

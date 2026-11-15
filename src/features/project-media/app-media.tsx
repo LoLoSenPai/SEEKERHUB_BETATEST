@@ -14,7 +14,7 @@ export function AppIcon({ media, name, className }: { media: ProjectMediaItem[];
 
 export function AppBanner({ media, className }: { media: ProjectMediaItem[]; className?: string }) {
   const banner = media.find((item) => item.kind === "BANNER");
-  return <div className={cn("aspect-video w-full overflow-hidden rounded-2xl bg-surface", className)}>
+  return <div className={cn("aspect-[2/1] w-full overflow-hidden rounded-2xl bg-surface", className)}>
     {banner ? <PrivateMediaImage key={`${banner.id}:${banner.url}`} id={banner.id} src={banner.url} alt="" width={banner.width} height={banner.height} className="size-full object-cover"
       fallback={<img src="/images/workspace-atmosphere.png" alt="" width={1600} height={900} className="size-full object-cover" />} />
       : <img src="/images/workspace-atmosphere.png" alt="" width={1600} height={900} className="size-full object-cover" />}

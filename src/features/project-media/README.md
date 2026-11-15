@@ -37,8 +37,15 @@ There is no remote URL import and no presigned client PUT for media.
 
 Input: static JPEG/PNG/WebP, <=3 MiB, <=4096 px per side, <=16 million pixels.
 Sharp decodes, auto-orients, strips metadata and re-encodes to WebP. Icon is
-512-square <=256 KiB; banner is 1600x900 <=1 MiB; screenshot long side <=1920,
+512-square <=256 KiB; banner is 1200x600 <=1 MiB; screenshot long side <=1920,
 <=1 MiB. High-entropy images that cannot meet the cap are rejected.
+
+Icon/banner output dimensions match the [Solana Mobile listing guidelines](https://docs.solanamobile.com/dapp-store/listing-page-guidelines), checked 2026-11-15.
+This beta platform does not enforce the Store's whole listing policy: images remain
+optional, screenshot slots remain capped at five and icon transparency is not rejected.
+Other icon/banner aspect ratios are center-cropped; screenshots are never cropped.
+Previously stored media is unchanged. The manager uses keyboard-accessible upload
+buttons and hidden native file inputs; storage/preview diagnostics are in a disclosure.
 
 An exact normalized-byte reservation and a cleanup task commit **before** PUT.
 Original inputs exist only in bounded process memory and are never stored.

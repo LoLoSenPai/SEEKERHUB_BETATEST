@@ -41,4 +41,16 @@ describe("project media hydration boundary", () => {
     expect(markup).toContain('aria-busy="false"');
     expect(markup).not.toContain("Preparing image controls...");
   });
+
+  it("replaces visible native inputs with named upload buttons and explains the Store dimensions", () => {
+    mocks.client = true;
+    const markup = render();
+    for (const input of markup.match(/<input\b[^>]*type="file"[^>]*>/g) ?? []) expect(input).toContain('hidden=""');
+    expect(markup).toContain('aria-label="Add app banner"');
+    expect(markup).toContain("1200 x 600 px");
+    expect(markup).not.toContain("1600 x 900");
+    expect(markup).toContain("Images are optional and saved as you add them.");
+    expect(markup).toMatch(/<details\b/);
+    expect(markup).not.toMatch(/<details\b[^>]*open/);
+  });
 });

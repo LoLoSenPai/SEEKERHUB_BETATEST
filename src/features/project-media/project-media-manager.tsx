@@ -2,10 +2,12 @@
 
 import { startTransition, useRef, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowDown, ArrowUp, ImagePlus, RefreshCw, Trash2 } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, LoaderCircle, RefreshCw, Trash2 } from "lucide-react";
 import { Button } from "@/src/components/ui/button";
+import { cn } from "@/src/lib/utils";
 import type { ProjectMediaItem, ProjectMediaKind } from "./types";
-import { PrivateMediaImage } from "./private-media-image";
+import { MediaFilePicker } from "./media-file-picker";
+import { MediaPreview, MediaUploadSlot } from "./media-upload-slot";
 
 const LABELS: Record<ProjectMediaKind, string> = { ICON: "App icon", BANNER: "App banner", SCREENSHOT: "Screenshots" };
 const subscribeToHydration = () => () => {};
@@ -20,73 +22,90 @@ export function ProjectMediaManager({ projectId, initialMedia }: { projectId: st
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [activity, setActivity] = useState("");
   const inFlight = useRef(false);
   const controlsDisabled = !hydrated || busy;
 
-  async function requestMedia(query: URLSearchParams, options?: RequestInit) {
+  async function requestMedia(query: URLSearchParams, options?: RequestInit, pending = "Updating images...", success = "Images saved.") {
     if (!hydrated || inFlight.current) return;
-    inFlight.current = true; setBusy(true); setError(""); setMessage("");
+    inFlight.current = true; setBusy(true); setError(""); setMessage(""); setActivity(pending);
     try {
       const response = await fetch(`/api/project-media?${query}`, { ...options, credentials: "same-origin", cache: "no-store" });
       const result = await response.json() as { media?: ProjectMediaItem[]; error?: string };
       if (!response.ok || !result.media) throw new Error(result.error ?? "Unable to update images.");
       setMedia(result.media);
-      setMessage(options?.method ? "Images saved. Removed images free storage after cleanup." : "Image previews refreshed.");
+      setMessage(success);
       if (options?.method) startTransition(() => router.refresh());
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Unable to update images.");
-    } finally { inFlight.current = false; setBusy(false); }
+    } finally { inFlight.current = false; setBusy(false); setActivity(""); }
   }
 
   async function upload(file: File | undefined, kind: ProjectMediaKind, replaceId?: string) {
     if (!file) return;
     if (!["image/jpeg", "image/png", "image/webp"].includes(file.type) || file.size > 3 * 1024 * 1024 || file.size === 0) {
-      setError("Choose a static JPEG, PNG or WebP image, up to 3 MiB."); return;
+      setMessage(""); setError("Choose a static JPEG, PNG or WebP image, up to 3 MiB."); return;
     }
     const query = new URLSearchParams({ projectId, kind, ...(replaceId ? { replaceId } : {}) });
     // The browser sets Content-Length for the File body; JavaScript cannot set this header.
-    await requestMedia(query, { method: "POST", headers: { "Content-Type": file.type }, body: file });
+    await requestMedia(query, { method: "POST", headers: { "Content-Type": file.type }, body: file }, `Uploading ${file.name}...`, `${kind === "SCREENSHOT" ? "Screenshot" : LABELS[kind]} saved.`);
+  }
+
+  function remove(id: string) {
+    void requestMedia(new URLSearchParams({ projectId, id }), { method: "DELETE" }, "Removing image...", "Image removed.");
   }
 
   const screenshots = media.filter((item) => item.kind === "SCREENSHOT").sort((a, b) => a.position - b.position);
+  function move(index: number, direction: -1 | 1) {
+    const ids = screenshots.map((shot) => shot.id);
+    [ids[index], ids[index + direction]] = [ids[index + direction], ids[index]];
+    void requestMedia(new URLSearchParams({ projectId }), { method: "PATCH", body: JSON.stringify({ projectId, ids }), headers: { "Content-Type": "application/json" } }, "Saving screenshot order...", "Screenshot order saved.");
+  }
+
   return <section className="grid gap-5" aria-label="Project images" aria-busy={controlsDisabled}>
-    <div className="flex flex-wrap items-start justify-between gap-3">
-      <div><h2 className="text-lg font-semibold">Make your app recognizable</h2><p className="text-sm text-muted-foreground">Optional icon, banner and up to 5 real screenshots. No images are added automatically.</p></div>
-      <Button type="button" variant="secondary" disabled={controlsDisabled} onClick={() => void requestMedia(new URLSearchParams({ projectId }))}><RefreshCw className="size-4" /> Refresh previews</Button>
+    <div className="space-y-2">
+      <h2 className="text-lg font-semibold">Give your app a face</h2>
+      <p className="text-sm text-muted-foreground">Help testers recognize your app before they download it. Images are optional and saved as you add them.</p>
+      <p className="text-xs text-muted-foreground">JPEG, PNG or WebP. Up to 3 MiB per image.</p>
     </div>
-    <p className="text-xs text-muted-foreground">Static JPEG, PNG or WebP. Up to 3 MiB, 4096 px per side and 16 MP. Images are optimized to WebP and metadata is removed. Project limit: 8 MiB, including images awaiting cleanup.</p>
-    <fieldset disabled={controlsDisabled} className="grid gap-6">
-      {(["ICON", "BANNER", "SCREENSHOT"] as const).map((kind) => {
-        const items = kind === "SCREENSHOT" ? screenshots : media.filter((item) => item.kind === kind);
-        return <div key={kind} className="grid gap-3">
-          <h3 className="font-medium">{LABELS[kind]}</h3>
-          <div className="flex flex-wrap gap-3">
-            {items.map((item, index) => <div key={item.id} className="grid w-44 gap-2 rounded-xl border border-border p-3">
-              <PrivateMediaImage key={`${item.id}:${item.url}`} id={item.id} src={item.url} alt={`${LABELS[kind]} ${index + 1}`} width={item.width} height={item.height} className="h-28 w-full rounded-lg object-contain" />
-              <label className="grid gap-1 text-xs">Replace image<input type="file" disabled={controlsDisabled} accept="image/jpeg,image/png,image/webp" className="max-w-full text-xs" onChange={(event) => { void upload(event.currentTarget.files?.[0], kind, item.id); event.currentTarget.value = ""; }} /></label>
-              <div className="flex gap-1">
-                <Button type="button" variant="secondary" size="sm" disabled={controlsDisabled} aria-label={`Remove ${LABELS[kind]} ${index + 1}`} onClick={() => void requestMedia(new URLSearchParams({ projectId, id: item.id }), { method: "DELETE" })}><Trash2 className="size-4" /></Button>
-                {kind === "SCREENSHOT" ? <>
-                  <Button type="button" variant="secondary" size="sm" disabled={index === 0 || controlsDisabled} aria-label={`Move screenshot ${index + 1} earlier`} onClick={() => {
-                    const ids = screenshots.map((shot) => shot.id); [ids[index - 1], ids[index]] = [ids[index], ids[index - 1]];
-                    void requestMedia(new URLSearchParams({ projectId }), { method: "PATCH", body: JSON.stringify({ projectId, ids }), headers: { "Content-Type": "application/json" } });
-                  }}><ArrowUp className="size-4" /></Button>
-                  <Button type="button" variant="secondary" size="sm" disabled={index === screenshots.length - 1 || controlsDisabled} aria-label={`Move screenshot ${index + 1} later`} onClick={() => {
-                    const ids = screenshots.map((shot) => shot.id); [ids[index], ids[index + 1]] = [ids[index + 1], ids[index]];
-                    void requestMedia(new URLSearchParams({ projectId }), { method: "PATCH", body: JSON.stringify({ projectId, ids }), headers: { "Content-Type": "application/json" } });
-                  }}><ArrowDown className="size-4" /></Button>
-                </> : null}
-              </div>
-            </div>)}
-          </div>
-          {(kind === "SCREENSHOT" ? items.length < 5 : items.length === 0) ? <label className="grid max-w-sm gap-2 text-sm"><span className="flex items-center gap-2"><ImagePlus className="size-4" /> Add {kind === "SCREENSHOT" ? "screenshot" : LABELS[kind].toLowerCase()}</span>
-            <input type="file" disabled={controlsDisabled} accept="image/jpeg,image/png,image/webp" className="max-w-full text-sm" onChange={(event) => { void upload(event.currentTarget.files?.[0], kind); event.currentTarget.value = ""; }} />
-          </label> : null}
-        </div>;
-      })}
+    {error ? <p role="alert" className="rounded-xl border border-danger/30 bg-danger/10 p-3 text-sm text-danger">{error}</p> : null}
+    <p role="status" aria-live="polite" className={cn("flex min-w-0 items-center gap-2 text-sm text-muted-foreground", hydrated && !busy && !message && "sr-only")}>
+      {!hydrated || busy ? <LoaderCircle className="size-4 shrink-0 animate-spin" aria-hidden="true" /> : message ? <Check className="size-4 shrink-0" aria-hidden="true" /> : null}
+      <span className="min-w-0 break-all">{!hydrated ? "Preparing image controls..." : busy ? activity : message}</span>
+    </p>
+    <fieldset disabled={controlsDisabled} className="grid min-w-0 gap-6">
+      <div className="grid min-w-0 gap-6 sm:grid-cols-[144px_minmax(0,1fr)]">
+        {(["ICON", "BANNER"] as const).map(kind => <MediaUploadSlot key={kind} kind={kind} item={media.find(item => item.kind === kind)}
+          disabled={controlsDisabled} onUpload={(file, replaceId) => void upload(file, kind, replaceId)} onRemove={remove} />)}
+      </div>
+      <div className="grid min-w-0 gap-3 border-t border-border pt-5">
+        <div className="flex items-center justify-between gap-3"><h3 className="text-sm font-semibold">Screenshots</h3><span className="text-xs tabular-nums text-muted-foreground">{screenshots.length} / 5</span></div>
+        <p className="text-xs text-muted-foreground">Show what testing your app looks like. Keep a consistent orientation; images are never cropped.</p>
+        <div className="grid min-w-0 grid-cols-2 items-start gap-3 sm:grid-cols-3">
+          {screenshots.map((item, index) => <div key={item.id} className="grid min-w-0 gap-2">
+            <MediaPreview item={item} alt={`Screenshots ${index + 1}`} className={item.width > item.height ? "aspect-video" : item.width === item.height ? "aspect-square" : "aspect-[9/16]"} />
+            <MediaFilePicker label={`Replace screenshot ${index + 1}`} compact disabled={controlsDisabled} onFile={(file) => void upload(file, "SCREENSHOT", item.id)} />
+            <div className="flex flex-wrap items-center justify-between gap-1">
+              <Button type="button" variant="ghost" size="sm" className="px-2" disabled={index === 0 || controlsDisabled} aria-label={`Move screenshot ${index + 1} earlier`} onClick={() => move(index, -1)}><ArrowLeft className="size-4" aria-hidden="true" /></Button>
+              <Button type="button" variant="ghost" size="sm" className="px-2" disabled={index === screenshots.length - 1 || controlsDisabled} aria-label={`Move screenshot ${index + 1} later`} onClick={() => move(index, 1)}><ArrowRight className="size-4" aria-hidden="true" /></Button>
+              <Button type="button" variant="ghost" size="sm" className="px-2" disabled={controlsDisabled} aria-label={`Remove Screenshots ${index + 1}`} onClick={() => remove(item.id)}><Trash2 className="size-4" aria-hidden="true" /></Button>
+            </div>
+          </div>)}
+          {screenshots.length < 5 ? <MediaFilePicker label="Add screenshot" disabled={controlsDisabled}
+            className={screenshots.length === 0 ? "col-span-full" : screenshots[0].width > screenshots[0].height ? "aspect-video" : "aspect-[9/16]"}
+            hint={screenshots.length === 0 ? "Add up to 5 images, portrait or landscape" : "Portrait or landscape"} onFile={file => void upload(file, "SCREENSHOT")} /> : null}
+        </div>
+      </div>
     </fieldset>
-    <p className="text-xs text-muted-foreground">Private preview links expire after 60 seconds. Refresh previews if an image no longer loads. Icons: 512 x 512; banners: 1600 x 900; screenshots: up to 1920 px.</p>
-    {error ? <p role="alert" className="text-sm text-danger">{error}</p> : null}
-    <p role="status" className="text-sm text-muted-foreground">{!hydrated ? "Preparing image controls..." : busy ? "Processing image..." : message}</p>
+    <details className="rounded-xl border border-border px-4 py-3 text-xs text-muted-foreground">
+      <summary className="cursor-pointer font-medium text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Image guidelines and preview help</summary>
+      <div className="mt-3 grid gap-3 leading-relaxed">
+        <p>Icons are saved at 512 x 512 and banners at 1200 x 600, matching the dApp Store dimensions. For Store screenshots, prepare 1080 x 1920 or 1920 x 1080 images with consistent dimensions. SeekerHub beta images remain optional; this is not a Store submission check.</p>
+        <a href="https://docs.solanamobile.com/dapp-store/listing-page-guidelines" target="_blank" rel="noreferrer" className="w-fit underline underline-offset-4">Solana Mobile listing guidelines</a>
+        <p>Static images only, up to 4096 px per side and 16 MP. We remove metadata and optimize to WebP. Screenshots keep their proportions, up to 1920 px on the longest side. The project image limit is 8 MiB; removed images count until cleanup completes.</p>
+        <p>Previews are private and refresh automatically when possible. If an image is missing, try refreshing it below.</p>
+        <Button type="button" variant="secondary" size="sm" className="w-fit" disabled={controlsDisabled} onClick={() => void requestMedia(new URLSearchParams({ projectId }), undefined, "Refreshing previews...", "Image previews refreshed.")}><RefreshCw className="size-4" aria-hidden="true" /> Refresh previews</Button>
+      </div>
+    </details>
   </section>;
 }

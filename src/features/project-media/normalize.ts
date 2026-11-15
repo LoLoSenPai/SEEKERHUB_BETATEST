@@ -47,7 +47,7 @@ export async function normalizeProjectMedia(input: Buffer, kind: ProjectMediaKin
     for (const quality of [85, 72, 58, 42]) {
       let pipeline = sharp(input, options).rotate().toColourspace("srgb");
       if (kind === "ICON") pipeline = pipeline.resize(512, 512, { fit: "cover" });
-      else if (kind === "BANNER") pipeline = pipeline.resize(1600, 900, { fit: "cover" });
+      else if (kind === "BANNER") pipeline = pipeline.resize(1200, 600, { fit: "cover" });
       else pipeline = pipeline.resize(1920, 1920, { fit: "inside", withoutEnlargement: true });
       // No keepMetadata/withMetadata: EXIF, GPS, XMP and ICC are intentionally discarded.
       const { data, info } = await pipeline.webp({ quality, effort: 4 }).timeout({ seconds: 10 }).toBuffer({ resolveWithObject: true });

@@ -1,5 +1,13 @@
 # Beta readiness checkpoint
 
+## App image controls and banner dimensions (2026-11-15)
+
+- Replaced the visible native file inputs with keyboard-accessible upload tiles, previews and replace/remove controls. Images save immediately; progress, success and error states are explicit. Screenshot ordering and private preview refresh remain available; technical limits are behind a disclosure.
+- New banners normalize to 1200 x 600, with a matching 2:1 default presentation. Icons remain 512 x 512. These dimensions were checked against the official Solana Mobile listing guidelines; optional beta images are not a complete Store submission validation. Existing media is neither rewritten nor deleted.
+- Local validation: 503 unit tests across 55 files; 5 targeted PostgreSQL/MinIO media integration tests; the expanded media E2E passes against `next start`, covering add/replace/reorder/remove, private access and tester feedback. Both themes at 390/1440 px pass scoped Axe and overflow checks. Targeted ESLint and the production build (including TypeScript) pass. The entire integration/E2E suites were not rerun for this bounded change.
+- Production deployment from `main` explicitly authorized on 2026-11-15. No migration, environment change or rewrite of existing media is required. Pre-rollout production health is ready; rollback baseline is commit `f72c393ff3ef9f801be67b9e370d1706e8215d41`, deployment `dpl_7tyEC4j3xnYG7cEYKuoPGubjaroK`. Verify the deployed commit, canonical domain and GitHub checks after push; the release receipt belongs in ignored `output/media-picker-production-receipt-20261115.json`.
+- Local review uses `http://127.0.0.1:3102` and the isolated loopback services via `scripts/with-review-env.mjs`. Screenshots are preserved in ignored `output/media-picker-review-20261115/`.
+
 ## Unified homepage, account entry and brand (2026-11-08)
 
 - The product homepage has one Get started entry and one secondary Sign in link. Signed-in visitors return to `/dashboard`. Auth no longer asks visitors to choose builder/tester; email links, wallets and existing passwords share the same account. Valid invitation `returnTo` destinations take priority; legacy `intent` links remain compatible.

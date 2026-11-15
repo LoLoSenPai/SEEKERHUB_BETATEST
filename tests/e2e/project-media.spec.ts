@@ -60,14 +60,51 @@ test("builder adds private app images and an invited tester can return to feedba
     await waitForWorkspaceAppearance(page);
     await page.screenshot({ path: testInfo.outputPath("builder-fallback-desktop.png"), fullPage: false, caret: "initial" });
     const asset = await readFile("public/images/workspace-atmosphere.png");
-    const image = await sharp(asset).resize(1200, 675).png().toBuffer();
+    const image = await sharp(asset).resize(1200, 600).png().toBuffer();
     const manager = page.getByRole("region", { name: "Project images" });
+    for (const width of [390, 1440]) {
+      await page.setViewportSize({ width, height: 900 });
+      for (const theme of ["light", "dark"]) {
+        if (await page.locator("html").getAttribute("data-theme") !== theme) {
+          await page.getByRole("button", { name: "Account and appearance", exact: true }).click();
+          await page.getByRole("button", { name: `Switch to ${theme} theme`, exact: true }).click();
+          await page.keyboard.press("Escape");
+        }
+        await manager.scrollIntoViewIfNeeded();
+        await page.mouse.move(0, 0);
+        await waitForWorkspaceAppearance(page);
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+        await expect(manager.locator('input[type="file"]:visible')).toHaveCount(0);
+        expect((await new AxeBuilder({ page }).include("#images").analyze()).violations).toEqual([]);
+        await page.screenshot({ path: testInfo.outputPath(`media-picker-empty-${theme}-${width}.png`), fullPage: false, caret: "initial" });
+        await manager.screenshot({ path: testInfo.outputPath(`media-picker-card-${theme}-${width}.png`) });
+      }
+    }
     for (const [label, kind] of [["Add app icon", "ICON"], ["Add app banner", "BANNER"], ["Add screenshot", "SCREENSHOT"]]) {
       await expect(manager.getByLabel(label, { exact: true })).toBeEnabled();
-      await manager.getByLabel(label, { exact: true }).setInputFiles({ name: "qa-image.png", mimeType: "image/png", buffer: image });
-      await expect(manager.getByRole("status")).toHaveText("Images saved. Removed images free storage after cleanup.");
+      const picker = manager.getByRole("button", { name: label, exact: false });
+      await picker.focus();
+      const fileChooserPromise = page.waitForEvent("filechooser");
+      await picker.press("Enter");
+      const fileChooser = await fileChooserPromise;
+      await fileChooser.setFiles({ name: "qa-image.png", mimeType: "image/png", buffer: image });
+      await expect(manager.getByRole("status")).toHaveText(/saved\./);
       await expect.poll(() => prisma.projectMedia.count({ where: { projectId: project.id, kind: kind as "ICON" | "BANNER" | "SCREENSHOT", status: "READY" } })).toBe(1);
     }
+    expect(await prisma.projectMedia.findFirst({ where: { projectId: project.id, kind: "BANNER", status: "READY" }, select: { width: true, height: true } })).toEqual({ width: 1200, height: 600 });
+    await manager.getByRole("button", { name: "Replace app banner", exact: true }).focus();
+    const replacementChooserPromise = page.waitForEvent("filechooser");
+    await page.keyboard.press("Enter");
+    await (await replacementChooserPromise).setFiles({ name: "replacement.png", mimeType: "image/png", buffer: image });
+    await expect(manager.getByRole("status")).toHaveText("App banner saved.");
+    await manager.getByLabel("Add screenshot", { exact: true }).setInputFiles({ name: "second.png", mimeType: "image/png", buffer: image });
+    await expect(manager.getByRole("status")).toHaveText("Screenshot saved.");
+    const previousOrder = await prisma.projectMedia.findMany({ where: { projectId: project.id, kind: "SCREENSHOT", status: "READY" }, orderBy: { position: "asc" }, select: { id: true } });
+    await manager.getByRole("button", { name: "Move screenshot 2 earlier", exact: true }).click();
+    await expect(manager.getByRole("status")).toHaveText("Screenshot order saved.");
+    expect((await prisma.projectMedia.findMany({ where: { projectId: project.id, kind: "SCREENSHOT", status: "READY" }, orderBy: { position: "asc" }, select: { id: true } })).map(row => row.id)).toEqual(previousOrder.map(row => row.id).reverse());
+    await manager.getByRole("button", { name: "Remove Screenshots 2", exact: true }).click();
+    await expect(manager.getByRole("status")).toHaveText("Image removed.");
     await page.goto(`${baseUrl}/builder/apps/${project.slug}`);
     await expect(page.getByRole("img", { name: "Orbit Notes icon" }).first()).toBeVisible();
     await expect.poll(() => page.locator("img").evaluateAll(images => images.every(image => (image as HTMLImageElement).complete && (image as HTMLImageElement).naturalWidth > 0))).toBe(true);
@@ -76,7 +113,8 @@ test("builder adds private app images and an invited tester can return to feedba
     await page.screenshot({ path: testInfo.outputPath("builder-media-desktop.png"), fullPage: false, caret: "initial" });
     const rows = await prisma.projectMedia.findMany({ where: { projectId: project.id, status: "READY" } });
     const profile = await prisma.builderProfile.findUniqueOrThrow({ where: { userId: owner.id } });
-    expect(profile.usedStorageBytes).toBe(rows.reduce((sum, row) => sum + row.fileSizeBytes, 0n));
+    const retained = await prisma.projectMedia.findMany({ where: { projectId: project.id } });
+    expect(profile.usedStorageBytes).toBe(retained.reduce((sum, row) => sum + row.fileSizeBytes, 0n));
     expect(profile.reservedStorageBytes).toBe(0n);
     const hidden = await outsider.request.get(`${baseUrl}/api/project-media/${rows[0].id}/url`);
     expect(hidden.status()).toBe(404);

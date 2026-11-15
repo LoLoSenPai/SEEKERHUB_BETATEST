@@ -53,4 +53,13 @@ describe("project media hydration boundary", () => {
     expect(markup).toMatch(/<details\b/);
     expect(markup).not.toMatch(/<details\b[^>]*open/);
   });
+
+  it("uses the existing image as the replacement control with a named corner remove button", () => {
+    mocks.client = true;
+    const markup = render(true);
+    expect(markup).toContain('aria-label="Replace app icon"');
+    expect(markup).toContain('aria-label="Remove app icon"');
+    expect(markup).not.toContain('>Replace app icon<');
+    expect(markup).toContain("Click an image to replace it.");
+  });
 });

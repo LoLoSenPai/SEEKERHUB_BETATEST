@@ -16,19 +16,72 @@ const input = { userId: "owner", projectId: "project", kind: "ICON" as const, by
 beforeEach(() => {
   vi.resetAllMocks();
   mocks.transaction.mockImplementation(async (action) => action(tx));
-  mocks.project.findFirst.mockResolvedValue({ id: "project" });
+  mocks.queryRaw.mockImplementation(async (sql) => sql.join("").includes('FROM "AppProject"')
+    ? [{ id: "project" }]
+    : [await mocks.media.create.mock.results.at(-1)?.value]);
   mocks.profile.findUnique.mockResolvedValue({ status: "ACTIVE", usedStorageBytes: 0n, reservedStorageBytes: 0n, maxStorageBytes: 10_000_000n });
   mocks.profile.updateMany.mockResolvedValue({ count: 1 });
   mocks.media.findMany.mockResolvedValue([]);
   mocks.media.create.mockImplementation(async ({ data }) => ({ ...data, status: "PENDING", readyAt: null, deletedAt: null }));
-  mocks.media.findUniqueOrThrow.mockImplementation(async () => mocks.media.create.mock.results.at(-1)?.value);
 });
 
 describe("persistent media quota and lifecycle", () => {
   it("checks ownership under the project lock before reserving", async () => {
-    mocks.project.findFirst.mockResolvedValue(null);
+    mocks.queryRaw.mockResolvedValue([]);
     await expect(reserveMediaQuota(input)).rejects.toMatchObject({ status: 404 });
+    expect(mocks.profile.findUnique).not.toHaveBeenCalled();
     expect(mocks.profile.update).not.toHaveBeenCalled(); expect(mocks.put).not.toHaveBeenCalled();
+  });
+  it("checks owner and soft deletion in one parameterized locking read", async () => {
+    await reserveMediaQuota(input);
+    expect(mocks.queryRaw).toHaveBeenCalledOnce();
+    const [sql, ...values] = mocks.queryRaw.mock.calls[0];
+    expect(sql.join("?").replace(/\s+/g, " ").trim()).toBe('SELECT id FROM "AppProject" WHERE id = ? AND "ownerId" = ? AND "deletedAt" IS NULL FOR UPDATE');
+    expect(values).toEqual(["project", "owner"]);
+    expect(mocks.project.findFirst).not.toHaveBeenCalled();
+  });
+  it("uses exactly three locking reads per upload and preserves finalization ordering", async () => {
+    mocks.put.mockImplementation(async () => {
+      expect(mocks.queryRaw).toHaveBeenCalledTimes(3);
+      expect(mocks.profile.findUnique).toHaveBeenCalledTimes(2);
+      expect(mocks.tasks.create).toHaveBeenCalledOnce();
+      expect(mocks.profile.updateMany).not.toHaveBeenCalled();
+    });
+    await storeProjectMedia({ ...input, data: Buffer.alloc(100) });
+    const reserved = await mocks.media.create.mock.results[0].value;
+    const [sql, ...values] = mocks.queryRaw.mock.calls[2];
+    expect(sql.join("?").replace(/\s+/g, " ").trim()).toBe('SELECT id, "projectId", status, "expiresAt", "storageKey", "replacesId", "fileSizeBytes" FROM "ProjectMedia" WHERE id = ? FOR UPDATE');
+    expect(values).toEqual([reserved.id]);
+    expect(mocks.project.findFirst).not.toHaveBeenCalled();
+    expect(mocks.media.findUniqueOrThrow).not.toHaveBeenCalled();
+    expect(mocks.put).toHaveBeenCalledOnce();
+    expect(mocks.profile.updateMany).toHaveBeenCalledWith({
+      where: { userId: "owner", reservedStorageBytes: { gte: 100n } },
+      data: { reservedStorageBytes: { decrement: 100n }, usedStorageBytes: { increment: 100n } },
+    });
+    expect(mocks.transaction).toHaveBeenNthCalledWith(2, expect.any(Function), { timeout: 45_000, maxWait: 5_000 });
+  });
+  it.each([
+    ["missing", []],
+    ["expired", [{ status: "PENDING", expiresAt: new Date(0) }]],
+    ["already finalized", [{ status: "READY", expiresAt: new Date(Date.now() + 60_000) }]],
+  ])("rejects a %s locked reservation before PUT", async (_label, rows) => {
+    mocks.queryRaw.mockResolvedValueOnce([{ id: "project" }])
+      .mockResolvedValueOnce([{ id: "project" }]).mockResolvedValueOnce(rows);
+    await expect(storeProjectMedia({ ...input, data: Buffer.alloc(100) })).rejects.toThrow();
+    expect(mocks.put).not.toHaveBeenCalled();
+    expect(mocks.profile.updateMany).not.toHaveBeenCalled();
+    expect(mocks.tasks.delete).not.toHaveBeenCalled();
+  });
+  it("rechecks ownership and active builder status before PUT", async () => {
+    mocks.queryRaw.mockResolvedValueOnce([{ id: "project" }]).mockResolvedValueOnce([]);
+    await expect(storeProjectMedia({ ...input, data: Buffer.alloc(100) })).rejects.toMatchObject({ code: "PROJECT_NOT_FOUND" });
+    expect(mocks.put).not.toHaveBeenCalled();
+    mocks.profile.findUnique.mockResolvedValueOnce({ status: "ACTIVE", usedStorageBytes: 0n, reservedStorageBytes: 0n, maxStorageBytes: 10_000_000n })
+      .mockResolvedValueOnce({ status: "SUSPENDED" });
+    await expect(storeProjectMedia({ ...input, data: Buffer.alloc(100) })).rejects.toMatchObject({ code: "BUILDER_REQUIRED" });
+    expect(mocks.put).not.toHaveBeenCalled();
+    expect(mocks.tasks.delete).not.toHaveBeenCalled();
   });
   it("persists exact reservation and cleanup before any PUT", async () => {
     const media = await reserveMediaQuota(input);

@@ -1,5 +1,14 @@
 # Beta readiness checkpoint
 
+## Compact media editor and CI follow-up (2026-11-15)
+
+- Replaced the large Replace rows with compact clickable thumbnails, corner removal controls and a screenshot add tile. Screenshot ordering uses dnd-kit with pointer and keyboard controls; the grip keeps scrolling available elsewhere on touch devices. Existing image dimensions and private authorization are unchanged.
+- Selected images appear immediately from a local object URL while the server saves. Confirmed saves retain that preview instead of waiting for another R2 download. Failed inputs restore the previous image and offer retry; ambiguous network/5xx failures require an authoritative refresh before retrying. Object URLs are released on removal/replacement/unmount. No production upload-latency benchmark or physical-phone validation is claimed.
+- Combined ownership/reservation checks with their locking reads, removing three database round trips per upload without changing locks, reservations, quotas or cleanup guarantees.
+- The `848452b` production deployment succeeded, but GitHub run `43753628382` failed its media browser test after a 120-second timeout; teardown masked the original blocking operation. Readiness/scan/screenshot/teardown waits now have bounded diagnostics and failed browser traces are retained in CI. The original timeout's precise cause remains unconfirmed; application checks were not disabled.
+- Full local validation against the production-mode build: 510 unit tests, 87 integration tests, all 25 browser tests, ESLint, TypeScript/build, the isolated APK artifact check and the production dependency gate pass. Media coverage includes 390/1440 px, light/dark empty states, populated contrast/overflow, immediate preview during a paused request, keyboard/pointer reorder, rejection/retry, a committed upload with a lost response, private access and tester feedback.
+- Production follow-up from `main` remains within the user's authorized rollout. No schema/environment changes or existing-media rewrite are required. Review server: `http://127.0.0.1:3103`, isolated PostgreSQL/MinIO via `scripts/with-review-env.mjs`. Final deployment/CI evidence goes in ignored `output/media-picker-production-receipt-20261115.json`; screenshot evidence is in `output/media-picker-review-20261115/`.
+
 ## App image controls and banner dimensions (2026-11-15)
 
 - Replaced the visible native file inputs with keyboard-accessible upload tiles, previews and replace/remove controls. Images save immediately; progress, success and error states are explicit. Screenshot ordering and private preview refresh remain available; technical limits are behind a disclosure.

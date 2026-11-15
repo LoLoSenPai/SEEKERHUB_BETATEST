@@ -47,6 +47,18 @@ Other icon/banner aspect ratios are center-cropped; screenshots are never croppe
 Previously stored media is unchanged. The manager uses keyboard-accessible upload
 buttons and hidden native file inputs; storage/preview diagnostics are in a disclosure.
 
+The editor displays an in-memory blob preview immediately, with a saving badge;
+only a successful server response confirms persistence. Clicking a thumbnail replaces
+it, the corner cross removes it, and dnd-kit provides screenshot sorting via a grip
+(pointer/touch or keyboard). Ordering and deletion update optimistically and roll
+back on rejection. Object URLs are released on replacement/removal/unmount.
+No preview is persisted in browser storage. A lost response or server error prompts
+an explicit refresh, not a blind POST retry that could duplicate an upload.
+
+The server combines ownership checks with the locking SELECT, and reads the reserved
+media in its locking SELECT. This removes three DB round trips per upload without
+changing lock order, quota reservations, storage writes or cleanup safeguards.
+
 An exact normalized-byte reservation and a cleanup task commit **before** PUT.
 Original inputs exist only in bounded process memory and are never stored.
 Serializable reservation with a project lock enforces per-project slots/8 MiB

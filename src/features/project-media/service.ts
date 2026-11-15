@@ -12,8 +12,11 @@ export const MEDIA_PENDING_TTL_MS = 5 * 60_000;
 export const MEDIA_CLEANUP_GRACE_MS = 60 * 60_000;
 
 export async function lockOwnedMediaProject(tx: Prisma.TransactionClient, projectId: string, userId: string) {
-  await tx.$queryRaw`SELECT id FROM "AppProject" WHERE id = ${projectId} FOR UPDATE`;
-  const project = await tx.appProject.findFirst({ where: { id: projectId, ownerId: userId, deletedAt: null }, select: { id: true } });
+  const [project] = await tx.$queryRaw<{ id: string }[]>`
+    SELECT id FROM "AppProject"
+    WHERE id = ${projectId} AND "ownerId" = ${userId} AND "deletedAt" IS NULL
+    FOR UPDATE
+  `;
   if (!project) throw new AppError("Project not found.", 404, "PROJECT_NOT_FOUND");
 }
 
@@ -90,8 +93,13 @@ export async function storeProjectMedia(input: {
   // row + pre-created deletion task survive PUT ambiguity, DB failure and process death.
   await prisma.$transaction(async (tx) => {
     await lockOwnedMediaProject(tx, input.projectId, input.userId);
-    await tx.$queryRaw`SELECT id FROM "ProjectMedia" WHERE id = ${reserved.id} FOR UPDATE`;
-    const media = await tx.projectMedia.findUniqueOrThrow({ where: { id: reserved.id } });
+    const [media] = await tx.$queryRaw<Pick<ProjectMedia,
+      "id" | "projectId" | "status" | "expiresAt" | "storageKey" | "replacesId" | "fileSizeBytes"
+    >[]>`
+      SELECT id, "projectId", status, "expiresAt", "storageKey", "replacesId", "fileSizeBytes"
+      FROM "ProjectMedia" WHERE id = ${reserved.id} FOR UPDATE
+    `;
+    if (!media) throw new Error("Media reservation missing.");
     if (media.status !== "PENDING" || media.expiresAt <= new Date()) throw new AppError("Upload expired. Try again after cleanup.", 409, "MEDIA_UPLOAD_EXPIRED");
     const profile = await tx.builderProfile.findUnique({ where: { userId: input.userId } });
     if (!profile || profile.status !== "ACTIVE") throw new AppError("An active builder account is required.", 403, "BUILDER_REQUIRED");

@@ -34,6 +34,8 @@
     "@aws-sdk/client-s3": "^3.917.0",
     "@aws-sdk/s3-request-presigner": "^3.917.0",
     "@devicefarmer/adbkit-apkreader": "^3.2.4",
+    "@dnd-kit/helpers": "0.5.3",
+    "@dnd-kit/react": "0.5.3",
     "@neondatabase/serverless": "1.1.0",
     "@prisma/adapter-neon": "6.19.3",
     "@prisma/adapter-pg": "6.19.3",

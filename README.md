@@ -164,7 +164,7 @@ Default public-beta quotas are one project, five retained releases, 250 MiB per 
 - `/admin`: builders, suspension, quotas, storage deletion queue, immediate confirmed purge, and audit log.
 - `/api/health`: database, R2, email, cron, and invite-key readiness.
 - `/api/cron/cleanup`: releases expired reservations, removes R2 objects, purges database records, and prunes transient records.
-- `vercel.json`: cleanup every ten minutes (Vercel Pro), with bounded batches, retries, and backlog logs. See `SECURITY.md` for operational limits.
+- `vercel.json`: hourly cleanup at minute 0, with bounded batches, retries, and backlog logs. See `SECURITY.md` for operational limits.
 - `/privacy`, `/terms`: beta legal drafts that must be reviewed before promotion. `/abuse` publishes the monitored `EMAIL_REPLY_TO` contact.
 
 ## Verification

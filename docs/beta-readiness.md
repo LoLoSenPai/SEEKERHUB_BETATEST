@@ -69,7 +69,7 @@ Historical pre-deployment checkpoint following the 2026-10-31 audit: changes wer
 - Final APKs use a server-only, create-only object key containing the exact inspected bytes. Staging replay cannot replace the distributed APK. Transport uses R2-compatible Content-MD5; SHA-256 remains the inspection identity.
 - Bounded APK parsing runs in a terminable worker. The production trace explicitly includes its native dependencies, verified outside the checkout.
 - Allowlist discovery, invite expiry/revocation before seat grant, physical-byte quotas and cleanup/admin purge accounting are covered by regression tests.
-- Cleanup runs every ten minutes with bounded work, fenced leases, retries and backlog logs. Framework/auth dependencies and the dependency audit gate were updated.
+- Cleanup originally ran every ten minutes; the schedule changed to hourly on 2026-11-23 to reduce idle Neon compute usage. Bounded work, fenced leases, retries and backlog logs are unchanged. Framework/auth dependencies and the dependency audit gate were updated.
 
 ## Historical local validation (before redesign)
 

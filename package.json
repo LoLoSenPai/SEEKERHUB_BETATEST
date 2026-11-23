@@ -7,6 +7,9 @@
   },
   "overrides": {
     "postcss": "8.5.25",
+    "@solana/web3.js@1.98.4": {
+      "jayson": "5.0.0"
+    },
     "@prisma/config": {
       "deepmerge-ts": "8.0.2",
       "effect": "3.22.1"
@@ -44,13 +47,13 @@
     "@solana-mobile/seeker-connect-wallet-standard": "0.2.0",
     "@solana-mobile/skr-domain": "1.1.1",
     "@solana-mobile/wallet-standard-mobile": "^0.5.3",
+    "@solana-program/token-2022": "0.20.1",
     "@solana/kit": "8.6.0",
-    "@solana/spl-token": "^0.4.14",
     "@solana/wallet-adapter-base": "^0.9.27",
     "@solana/wallet-adapter-react": "^0.15.39",
     "@solana/wallet-adapter-react-ui": "^0.9.39",
     "@solana/wallet-standard-util": "^1.1.2",
-    "@solana/web3.js": "^1.98.4",
+    "@solana/web3.js": "1.98.4",
     "better-auth": "1.7.14",
     "bs58": "^6.0.0",
     "class-variance-authority": "^0.7.1",

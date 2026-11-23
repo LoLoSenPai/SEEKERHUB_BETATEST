@@ -185,7 +185,7 @@ For isolated local review, `scripts/with-review-env.mjs` replaces service creden
 
 Current E2E handoff: tool policy blocked starting the local production-mode server (`next start`). A helper has been prepared for the user to start it before the final post-fix rerun. The build/artifact results above do not imply a complete E2E pass or a production deployment.
 
-The remaining native `bigint` binding warning comes from a Solana transitive dependency; the package falls back to its JavaScript implementation. Production audit exceptions and mitigations are tracked in `SECURITY.md`. Review them before each public deployment rather than accepting breaking downgrades proposed by `npm audit fix --force`.
+Run `npm run audit:production` before each public deployment. High and critical production findings block release with no exceptions. The rationale and regression checks for the wallet dependency pins are documented in [SECURITY.md](SECURITY.md).
 
 ## V2
 

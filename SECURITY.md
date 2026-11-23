@@ -12,6 +12,8 @@ Updated Next.js and matching ESLint config to 16.4.3, Better Auth to 1.7.14, and
 
 The only cross-major override is `@prisma/config -> deepmerge-ts@8.0.2` for [recursive object exhaustion](https://github.com/RebeccaStevens/deepmerge-ts/security/advisories/GHSA-ggr8-5vv4-36mx). Prisma 6.19.3 imports the unchanged named `deepmerge` API exclusively for local configuration loading (remote config extension is disabled). Prisma generation, validation and local config loading must remain working. This avoids an unrelated Prisma/schema major migration. Remove the override when the supported Prisma line includes the fix.
 
+Prisma 6.19.3 pins `effect@3.21.0` through `@prisma/config`. Override only that dependency to `3.22.1`, the patched release for [GHSA-7589-6fvf-x4pw](https://github.com/advisories/GHSA-7589-6fvf-x4pw). Remove the override when the supported Prisma version resolves a patched Effect without it. This is a dependency fix, not an audit exception.
+
 Better Auth 1.7's custom rate-limit storage requires only atomic `consume`; the adapter keeps its HMAC keys and conditional database writes, removing obsolete `get`/`set` hooks rather than restoring a racy fallback.
 
 ### Solana Fixed-Width Layouts
